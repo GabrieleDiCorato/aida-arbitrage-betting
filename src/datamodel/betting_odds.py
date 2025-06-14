@@ -27,12 +27,9 @@ class BettingOdds:
     home_or_draw: Optional[float] = None    # 1X
     away_or_draw: Optional[float] = None    # X2
     home_or_away: Optional[float] = None    # 12
-    
-    # Total Goals (Over/Under)
+      # Total Goals (Over/Under)
     over_2_5: Optional[float] = None
     under_2_5: Optional[float] = None
-    over_1_5: Optional[float] = None
-    under_1_5: Optional[float] = None
     over_3_5: Optional[float] = None
     under_3_5: Optional[float] = None
 
@@ -57,12 +54,11 @@ class BettingOdds:
             raise ValueError("Match ID cannot be empty")
         if not self.home_team or not self.away_team:
             raise ValueError("Team names cannot be empty")
-        
-        # Validate odds are positive if provided
+          # Validate odds are positive if provided
         odds_fields = [
             self.home_win, self.draw, self.away_win, self.home_or_draw,
             self.away_or_draw, self.home_or_away, self.over_2_5, self.under_2_5,
-            self.over_1_5, self.under_1_5, self.over_3_5, self.under_3_5,
+            self.over_3_5, self.under_3_5,
             self.both_teams_score_yes, self.both_teams_score_no
         ]
         
@@ -90,16 +86,13 @@ class BettingOdds:
                     'home_or_draw': self.home_or_draw,
                     'away_or_draw': self.away_or_draw,
                     'home_or_away': self.home_or_away
-                },
-                # Total Goals
+                },                # Total Goals
                 'total_goals': {
                     'over_2_5': self.over_2_5,
                     'under_2_5': self.under_2_5,
-                    'over_1_5': self.over_1_5,
-                    'under_1_5': self.under_1_5,
                     'over_3_5': self.over_3_5,
                     'under_3_5': self.under_3_5
-                },                
+                },
                 # Both Teams to Score
                 'both_teams_score': {
                     'yes': self.both_teams_score_yes,
@@ -134,12 +127,9 @@ class BettingOdds:
             home_or_draw=odds.get('double_chance', {}).get('home_or_draw'),
             away_or_draw=odds.get('double_chance', {}).get('away_or_draw'),
             home_or_away=odds.get('double_chance', {}).get('home_or_away'),
-            
-            # Total Goals
+              # Total Goals
             over_2_5=odds.get('total_goals', {}).get('over_2_5'),
             under_2_5=odds.get('total_goals', {}).get('under_2_5'),
-            over_1_5=odds.get('total_goals', {}).get('over_1_5'),
-            under_1_5=odds.get('total_goals', {}).get('under_1_5'),
             over_3_5=odds.get('total_goals', {}).get('over_3_5'),
             under_3_5=odds.get('total_goals', {}).get('under_3_5'),
               # Both Teams to Score

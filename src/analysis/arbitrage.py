@@ -160,10 +160,8 @@ class ArbitrageAnalyzer:
     def _analyze_over_under_markets(cls, odds_list: List[BettingOdds]) -> Dict[str, Dict[str, Any]]:
         """Analyze Over/Under markets for arbitrage opportunities."""
         opportunities = {}
-        
-        # Check different Over/Under lines
+          # Check different Over/Under lines
         ou_markets = [
-            ('over_under_1_5', 'over_1_5', 'under_1_5'),
             ('over_under_2_5', 'over_2_5', 'under_2_5'),
             ('over_under_3_5', 'over_3_5', 'under_3_5')
         ]

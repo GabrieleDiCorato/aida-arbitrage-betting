@@ -12,9 +12,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException, WebDriverException
-from selenium.webdriver.common.action_chains import ActionChains
 from webdriver_manager.chrome import ChromeDriverManager
-from bs4 import BeautifulSoup
 from datetime import datetime
 import re
 from typing import Optional, Dict, Any
@@ -143,15 +141,14 @@ class SisalSeleniumScraper:
             
             # Set faster page load timeout
             self.driver.set_page_load_timeout(15)  # Reduced from 30
-            
-            # Create WebDriverWait instance with shorter timeout
+              # Create WebDriverWait instance with shorter timeout
             self.wait = WebDriverWait(self.driver, 10)  # Reduced from 20
             
-            print("✅ Chrome WebDriver setup successful")
+            print("Chrome WebDriver setup successful")
             return True
             
         except Exception as e:
-            print(f"❌ Failed to setup Chrome WebDriver: {e}")
+            print(f"Failed to setup Chrome WebDriver: {e}")
             return False
 
     def scrape_betting_odds(self, url: str) -> Optional[BettingOdds]:
@@ -160,12 +157,11 @@ class SisalSeleniumScraper:
         
         Args:
             url: The URL of the Sisal live event page
-            
-        Returns:
+              Returns:
             BettingOdds instance with the scraped data, or None if scraping fails
         """
         try:
-            print(f"🎯 Starting Selenium scraping for: {url}")
+            print(f"Starting Selenium scraping for: {url}")
             
             # Setup driver if not already done
             if not self.driver:
@@ -176,7 +172,7 @@ class SisalSeleniumScraper:
             return self._scrape_direct(url)
             
         except Exception as e:
-            print(f"❌ Selenium scraping error: {e}")
+            print(f"Selenium scraping error: {e}")
             return None
         finally:
             # Clean up
@@ -184,7 +180,7 @@ class SisalSeleniumScraper:
                 try:
                     self.driver.quit()
                     self.driver = None
-                    print("🧹 Browser closed")
+                    print("Browser closed")
                 except:
                     pass
 
@@ -193,10 +189,10 @@ class SisalSeleniumScraper:
         try:
             # Type guard to ensure driver is available
             if not self.driver:
-                print("❌ WebDriver not initialized")
+                print("WebDriver not initialized")
                 return None
                 
-            print("🎯 Direct navigation to match page...")
+            print("Direct navigation to match page...")
             
             # Navigate directly to the target page
             self.driver.get(url)
@@ -204,97 +200,12 @@ class SisalSeleniumScraper:
             # Handle cookie banner if present
             self._handle_cookie_banner()
             
-            # Wait for the page to load with shorter timeout
-            self._wait_for_page_load_optimized()
-            
-            # Verify we're on a betting page
-            if not self._verify_betting_page():
-                print("❌ Failed to load betting page properly")
-                return None
-            
-            # Extract odds data
+            # Extract odds data (includes waiting for odds elements)
             return self._extract_odds_from_page(url)
             
         except Exception as e:
-            print(f"❌ Direct scraping error: {e}")
+            print(f"Direct scraping error: {e}")
             return None
-
-    def _wait_for_page_load_optimized(self):
-        """Optimized page load wait with shorter timeouts."""
-        if not self.driver:
-            return
-            
-        try:
-            # Wait for document ready with shorter timeout
-            WebDriverWait(self.driver, 8).until(
-                lambda driver: driver.execute_script("return document.readyState") == "complete"
-            )
-            
-            # Wait specifically for betting content instead of generic delay
-            self._wait_for_betting_content()
-            
-            print("✅ Page loaded and betting content ready")
-            
-        except TimeoutException:
-            print("⚠️ Page load timeout - proceeding anyway")
-        except Exception as e:
-            print(f"⚠️ Page load wait warning: {e}")
-
-    def _wait_for_betting_content(self):
-        """Wait specifically for betting-related content to appear."""
-        if not self.driver:
-            return
-            
-        try:
-            # Wait for any betting-related elements to appear
-            betting_selectors = [
-                "[class*='odd']", "[class*='quote']", "[data-odd]",
-                ".market", ".bet", ".event"
-            ]
-            
-            for selector in betting_selectors:
-                try:
-                    WebDriverWait(self.driver, 3).until(
-                        EC.presence_of_element_located((By.CSS_SELECTOR, selector))
-                    )
-                    print(f"✅ Betting content loaded: {selector}")
-                    return
-                except TimeoutException:
-                    continue
-            
-            print("⚠️ No specific betting elements found, proceeding with general content")
-            
-        except Exception as e:
-            print(f"⚠️ Betting content wait error: {e}")
-
-    def _verify_betting_page(self) -> bool:
-        """Verify that we're on a proper betting page with odds."""
-        if not self.driver:
-            return False
-            
-        try:
-            # Check page title
-            title = self.driver.title.lower()
-            if any(keyword in title for keyword in ['sisal', 'scommesse', 'betting']):
-                print(f"✅ Valid betting page title: {self.driver.title}")
-            else:
-                print(f"⚠️ Unexpected page title: {self.driver.title}")
-            
-            # Check for betting-related content
-            page_text = self.driver.page_source.lower()
-            betting_keywords = ['odds', 'quote', 'scommesse', '1x2', 'goal', 'over', 'under']
-            found_keywords = [kw for kw in betting_keywords if kw in page_text]
-            
-            if found_keywords:
-                print(f"✅ Found betting keywords: {', '.join(found_keywords[:3])}...")
-                return True
-            else:
-                print("❌ No betting keywords found on page")
-                return False
-                
-        except Exception as e:
-            print(f"❌ Page verification error: {e}")
-            return False
 
     def _extract_odds_from_page(self, url: str) -> Optional[BettingOdds]:
         """Extract betting odds from the current page."""
@@ -302,32 +213,28 @@ class SisalSeleniumScraper:
             return None
             
         try:
-            print("📊 Extracting odds from page...")
+            print("Extracting odds from page...")
             
-            # Get page source and parse with BeautifulSoup
-            page_source = self.driver.page_source
-            soup = BeautifulSoup(page_source, 'html.parser')
-            
-            # Also try to find odds using Selenium selectors for dynamic content
+            # Wait for odds elements to appear
             self._wait_for_odds_elements()
             
             # Extract match information
-            match_info = self._extract_match_info_selenium(soup, url)
+            match_info = self._extract_match_info_selenium(url)
             if not match_info:
-                print("❌ Could not extract match information")
+                print("Could not extract match information")
                 return None
             
-            print(f"🏆 Match: {match_info['home_team']} vs {match_info['away_team']}")
+            print(f"Match: {match_info['home_team']} vs {match_info['away_team']}")
             
-            # Extract odds using both Selenium and BeautifulSoup
-            odds_data = self._extract_odds_selenium(soup)
+            # Extract odds
+            odds_data = self._extract_odds_selenium()
             
             # Count non-null odds
             odds_found = sum(1 for v in odds_data.values() if v is not None)
-            print(f"🎲 Extracted {odds_found} odds values")
+            print(f"Extracted {odds_found} odds values")
             
             if odds_found == 0:
-                print("❌ No odds found")
+                print("No odds found")
                 return None
             
             # Create BettingOdds instance
@@ -340,134 +247,122 @@ class SisalSeleniumScraper:
                 **odds_data
             )
             
-            print("✅ Successfully created BettingOdds instance")
+            print("Successfully created BettingOdds instance")
             return betting_odds
             
         except Exception as e:
-            print(f"❌ Odds extraction error: {e}")
+            print(f"Odds extraction error: {e}")
             return None
 
     def _wait_for_odds_elements(self):
-        """Wait for odds elements to appear with optimized timeouts."""
+        """Wait for betting odds elements to appear using direct selectors."""
         if not self.driver:
             return
             
         try:
-            # Common selectors for odds elements with shorter timeouts
+            print("Waiting for betting odds elements...")
+            
+            # Wait for any of the betting odds buttons to appear
             odds_selectors = [
-                "[data-testid*='odd']",
-                ".odd", ".odds", ".quote",
-                "[class*='odd']", "[class*='quote']",
-                "button[data-odd]", "span[data-odd]"
+                # 1X2 odds - using more specific selector
+                'button[data-qa$="_1"] span.tw-fr-text-paragraph-s.tw-fr-font-bold',  # Home win
+                'button[data-qa$="_2"] span.tw-fr-text-paragraph-s.tw-fr-font-bold',  # Draw
+                'button[data-qa$="_3"] span.tw-fr-text-paragraph-s.tw-fr-font-bold',  # Away win
+                
+                # GOAL/NOGOAL odds - using more specific selector
+                'button[data-qa*="18_0_1"] span.tw-fr-text-paragraph-s.tw-fr-font-bold',  # GOAL
+                'button[data-qa*="18_0_2"] span.tw-fr-text-paragraph-s.tw-fr-font-bold',  # NOGOAL
+                
+                # Over/Under 2.5 odds - using more specific selector
+                'button[data-qa*="250_1"] span.tw-fr-text-paragraph-s.tw-fr-font-bold',  # Under 2.5
+                'button[data-qa*="250_2"] span.tw-fr-text-paragraph-s.tw-fr-font-bold',  # Over 2.5
+                
+                # Over/Under 3.5 odds - using more specific selector
+                'button[data-qa*="350_1"] span.tw-fr-text-paragraph-s.tw-fr-font-bold',  # Under 3.5
+                'button[data-qa*="350_2"] span.tw-fr-text-paragraph-s.tw-fr-font-bold',  # Over 3.5
+                
+                # Double Chance odds - using more specific selector
+                'button[data-qa*="99999_0_1"] span.tw-fr-text-paragraph-s.tw-fr-font-bold',  # 1X
+                'button[data-qa*="99999_0_2"] span.tw-fr-text-paragraph-s.tw-fr-font-bold',  # X2
+                'button[data-qa*="99999_0_3"] span.tw-fr-text-paragraph-s.tw-fr-font-bold'   # 12
             ]
             
             for selector in odds_selectors:
                 try:
-                    element = WebDriverWait(self.driver, 5).until(  # Reduced from 20 to 5
+                    element = WebDriverWait(self.driver, 5).until(
                         EC.presence_of_element_located((By.CSS_SELECTOR, selector))
                     )
                     if element:
-                        print(f"✅ Found odds elements with selector: {selector}")
+                        print("Found betting odds elements")
                         return
                 except TimeoutException:
                     continue
             
-            print("⚠️ No specific odds elements found, proceeding with page content")
+            print("No betting odds elements found, proceeding anyway")
             
         except Exception as e:
-            print(f"⚠️ Odds elements wait warning: {e}")
+            print(f"Odds elements wait warning: {e}")
 
-    def _extract_match_info_selenium(self, soup: BeautifulSoup, url: str) -> Optional[Dict[str, str]]:
-        """Extract match information using both Selenium and BeautifulSoup."""
+    def _extract_match_info_selenium(self, url: str) -> Optional[Dict[str, str]]:
+        """Extract match information using direct selectors."""
         if not self.driver:
             return None
             
         try:
-            # Try Selenium selectors first (for dynamic content)
+            # Try specific selector for match title from the page structure
             match_title = None
             
-            # Selenium-based selectors
-            selenium_selectors = [
-                "h1", "h2", ".match-title", ".event-title",
-                "[data-testid*='match']", "[data-testid*='event']"
-            ]
+            # Primary selector: team names in dropdown toggle button
+            try:
+                element = self.driver.find_element(By.CSS_SELECTOR, 'button[data-qa="regulator-live-detail-dropdown-toggle"] div')
+                match_title = element.text.strip()
+                if match_title and (' - ' in match_title or ' vs ' in match_title):
+                    print(f"Found match title from dropdown: {match_title}")
+                else:
+                    match_title = None
+            except Exception as e:
+                print(f"Could not extract from dropdown selector: {e}")
             
-            for selector in selenium_selectors:
-                try:
-                    element = self.driver.find_element(By.CSS_SELECTOR, selector)
-                    text = element.text.strip()
-                    if self._looks_like_match_title(text):
-                        match_title = text
-                        break
-                except:
-                    continue
-            
-            # Fallback to BeautifulSoup parsing
+            # Fallback selectors
             if not match_title:
-                match_title = self._extract_match_title_from_soup(soup)
+                fallback_selectors = ["h1", "h2", "title", ".match-title", ".event-title"]
+                for selector in fallback_selectors:
+                    try:
+                        element = self.driver.find_element(By.CSS_SELECTOR, selector)
+                        text = element.text.strip()
+                        if text and (' - ' in text or ' vs ' in text or ' v ' in text):
+                            match_title = text
+                            break
+                    except:
+                        continue
             
-            # Final fallback to URL parsing
+            # Fallback to URL parsing
             if not match_title:
                 match_title = self._extract_match_from_url(url)
             
             if not match_title:
-                print("❌ Could not find match title")
+                print("Could not find match title")
                 return None
             
-            print(f"📋 Found match title: {match_title}")
+            print(f"Found match title: {match_title}")
             
             # Parse team names
             teams = self._parse_team_names(match_title)
             if not teams:
-                print(f"❌ Could not parse teams from: {match_title}")
+                print(f"Could not parse teams from: {match_title}")
                 return None
             
-            # Generate match ID
+            # Generate match ID from URL
             match_id = self._generate_match_id(url, teams)
             
             return {
-                'home_team': teams[0],
-                'away_team': teams[1],
+                'home_team': teams[0],                'away_team': teams[1],
                 'match_id': match_id
             }
             
         except Exception as e:
-            print(f"❌ Match info extraction error: {e}")
+            print(f"Match info extraction error: {e}")
             return None
-    
-    def _extract_match_title_from_soup(self, soup: BeautifulSoup) -> Optional[str]:
-        """Extract match title from BeautifulSoup."""
-        selectors = [
-            'title', 'h1', 'h2', '.match-title', '.event-title',
-            '[data-testid*="match"]', '[data-testid*="event"]'
-        ]
-        
-        for selector in selectors:
-            elements = soup.select(selector)
-            for element in elements:
-                text = element.get_text(strip=True)
-                if self._looks_like_match_title(text):
-                    return text
-        return None
-    
-    def _looks_like_match_title(self, text: str) -> bool:
-        """Check if text looks like a match title."""
-        if not text or len(text) < 5:
-            return False
-        
-        # Must contain team separator
-        separators = [' - ', ' vs ', ' v ', '–', '—', ' VS ', ' V ']
-        has_separator = any(sep in text for sep in separators)
-        
-        # Should not be too long
-        if len(text) > 200:
-            return False
-        
-        # Should be reasonable length for team names
-        if len(text.split()) > 15:
-            return False
-        
-        return has_separator
     
     def _extract_match_from_url(self, url: str) -> Optional[str]:
         """Extract match info from URL path."""
@@ -521,8 +416,8 @@ class SisalSeleniumScraper:
         away_clean = re.sub(r'[^a-zA-Z0-9]', '_', teams[1].lower())
         return f"{home_clean}_vs_{away_clean}"
     
-    def _extract_odds_selenium(self, soup: BeautifulSoup) -> Dict[str, Optional[float]]:
-        """Extract betting odds using both Selenium and BeautifulSoup."""
+    def _extract_odds_selenium(self) -> Dict[str, Optional[float]]:
+        """Extract betting odds using direct CSS selectors."""
         odds_data: Dict[str, Optional[float]] = {
             'home_win': None,
             'draw': None,
@@ -533,160 +428,61 @@ class SisalSeleniumScraper:
             'both_teams_score_no': None,
             'home_or_draw': None,
             'away_or_draw': None,
-            'home_or_away': None
-        }
+            'home_or_away': None        }
         
         try:
-            # Try Selenium selectors for dynamic content first
+            # Extract odds using direct CSS selectors
             self._extract_odds_selenium_selectors(odds_data)
             
-            # Fallback to text parsing from page source
-            if sum(1 for v in odds_data.values() if v is not None) == 0:
-                self._extract_odds_from_text(soup, odds_data)
-            
         except Exception as e:
-            print(f"❌ Odds extraction error: {e}")
+            print(f"Odds extraction error: {e}")
         
         return odds_data
 
     def _extract_odds_selenium_selectors(self, odds_data: Dict[str, Optional[float]]):
-        """Try to extract odds using Selenium element selectors."""
+        """Extract betting odds using direct CSS selectors."""
         if not self.driver:
             return
             
         try:
-            # Common patterns for odds elements
-            odds_selectors = [
-                "button[data-odd]",
-                ".odd-value",
-                ".quote",
-                "[class*='odd']",
-                "[data-testid*='odd']"
-            ]
+            print("Extracting odds using direct selectors...")
             
-            for selector in odds_selectors:
+            # Direct selectors for different betting markets
+            selectors = {
+                # 1X2 odds - using more specific selector
+                'home_win': 'button[data-qa$="_1"] span.tw-fr-text-paragraph-s.tw-fr-font-bold',
+                'draw': 'button[data-qa$="_2"] span.tw-fr-text-paragraph-s.tw-fr-font-bold', 
+                'away_win': 'button[data-qa$="_3"] span.tw-fr-text-paragraph-s.tw-fr-font-bold',
+                
+                # GOAL/NOGOAL odds - using more specific selector
+                'both_teams_score_yes': 'button[data-qa*="18_0_1"] span.tw-fr-text-paragraph-s.tw-fr-font-bold',
+                'both_teams_score_no': 'button[data-qa*="18_0_2"] span.tw-fr-text-paragraph-s.tw-fr-font-bold',
+                
+                # Over/Under 2.5 odds - using more specific selector
+                'under_2_5': 'button[data-qa*="250_1"] span.tw-fr-text-paragraph-s.tw-fr-font-bold',
+                'over_2_5': 'button[data-qa*="250_2"] span.tw-fr-text-paragraph-s.tw-fr-font-bold',
+                
+                # Over/Under 3.5 odds - using more specific selector
+                'under_3_5': 'button[data-qa*="350_1"] span.tw-fr-text-paragraph-s.tw-fr-font-bold',
+                'over_3_5': 'button[data-qa*="350_2"] span.tw-fr-text-paragraph-s.tw-fr-font-bold',
+                  # Double Chance odds - using more specific selector from HTML
+                'home_or_draw': 'button[data-qa*="99999_0_1"] span.tw-fr-text-paragraph-s.tw-fr-font-bold',
+                'away_or_draw': 'button[data-qa*="99999_0_2"] span.tw-fr-text-paragraph-s.tw-fr-font-bold',
+                'home_or_away': 'button[data-qa*="99999_0_3"] span.tw-fr-text-paragraph-s.tw-fr-font-bold'
+            }
+            
+            for bet_type, selector in selectors.items():
                 try:
-                    elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
-                    if len(elements) >= 3:  # At least 3 odds for 1X2
-                        print(f"  🎯 Found odds elements with: {selector}")
-                        # Try to extract 1X2 odds from first 3 elements
-                        for i, element in enumerate(elements[:3]):
-                            try:
-                                odd_text = element.text.strip()
-                                odd_value = float(odd_text)
-                                if i == 0:
-                                    odds_data['home_win'] = odd_value
-                                elif i == 1:
-                                    odds_data['draw'] = odd_value
-                                elif i == 2:
-                                    odds_data['away_win'] = odd_value
-                            except:
-                                continue
-                        
-                        if odds_data['home_win']:  # If we found something, stop
-                            break
-                except:
-                    continue
+                    element = self.driver.find_element(By.CSS_SELECTOR, selector)
+                    odd_text = element.text.strip()
+                    odd_value = float(odd_text)
+                    odds_data[bet_type] = odd_value
+                    print(f"  {bet_type}: {odd_value}")
+                except Exception as e:
+                    print(f"  Failed to extract {bet_type}: {e}")
+                    
         except Exception as e:
-            print(f"  ⚠️ Selenium selectors failed: {e}")
-    
-    def _extract_odds_from_text(self, soup: BeautifulSoup, odds_data: Dict[str, Optional[float]]):
-        """Extract odds from page text using regex patterns."""
-        try:
-            # Get all text content
-            if self.driver:
-                text = self.driver.page_source
-            else:
-                text = soup.get_text()
-            
-            # Extract 1X2 odds
-            self._extract_1x2_odds_from_text(text, odds_data)
-            
-            # Extract Over/Under odds
-            self._extract_over_under_odds_from_text(text, odds_data)
-            
-            # Extract Goal/NoGoal odds
-            self._extract_goal_nogoal_odds_from_text(text, odds_data)
-            
-            # Extract Double Chance odds
-            self._extract_double_chance_odds_from_text(text, odds_data)
-            
-        except Exception as e:
-            print(f"  ⚠️ Text extraction failed: {e}")
-    
-    def _extract_1x2_odds_from_text(self, text: str, odds_data: Dict[str, Optional[float]]):
-        """Extract 1X2 odds from text."""
-        patterns = [
-            r'(\d+\.?\d*)\s*X\s*(\d+\.?\d*)\s*(\d+\.?\d*)',
-            r'1\s*(\d+\.?\d*)\s*X\s*(\d+\.?\d*)\s*2\s*(\d+\.?\d*)',
-            r'ESITO.*?(\d+\.?\d+)\s*X\s*(\d+\.?\d+)\s*(\d+\.?\d+)',
-        ]
-        
-        for pattern in patterns:
-            match = re.search(pattern, text)
-            if match:
-                try:
-                    odds_data['home_win'] = float(match.group(1))
-                    odds_data['draw'] = float(match.group(2))
-                    odds_data['away_win'] = float(match.group(3))
-                    print(f"    ✅ 1X2: {odds_data['home_win']}/{odds_data['draw']}/{odds_data['away_win']}")
-                    return
-                except (ValueError, IndexError):
-                    continue
-    
-    def _extract_over_under_odds_from_text(self, text: str, odds_data: Dict[str, Optional[float]]):
-        """Extract Over/Under odds from text."""
-        patterns = [
-            r'UNDER\s*(\d+\.?\d*)\s*OVER\s*(\d+\.?\d*)',
-            r'Under\s*2\.5\s*(\d+\.?\d*)\s*Over\s*2\.5\s*(\d+\.?\d*)',
-        ]
-        
-        for pattern in patterns:
-            match = re.search(pattern, text)
-            if match:
-                try:
-                    odds_data['under_2_5'] = float(match.group(1))
-                    odds_data['over_2_5'] = float(match.group(2))
-                    print(f"    ✅ O/U 2.5: {odds_data['over_2_5']}/{odds_data['under_2_5']}")
-                    return
-                except (ValueError, IndexError):
-                    continue
-    
-    def _extract_goal_nogoal_odds_from_text(self, text: str, odds_data: Dict[str, Optional[float]]):
-        """Extract Goal/NoGoal odds from text."""
-        patterns = [
-            r'GOAL\s*(\d+\.?\d*)\s*NOGOAL\s*(\d+\.?\d*)',
-            r'GG\s*(\d+\.?\d*)\s*NG\s*(\d+\.?\d*)',
-        ]
-        
-        for pattern in patterns:
-            match = re.search(pattern, text)
-            if match:
-                try:
-                    odds_data['both_teams_score_yes'] = float(match.group(1))
-                    odds_data['both_teams_score_no'] = float(match.group(2))
-                    print(f"    ✅ BTTS: {odds_data['both_teams_score_yes']}/{odds_data['both_teams_score_no']}")
-                    return
-                except (ValueError, IndexError):
-                    continue
-    
-    def _extract_double_chance_odds_from_text(self, text: str, odds_data: Dict[str, Optional[float]]):
-        """Extract Double Chance odds from text."""
-        patterns = [
-            r'1X\s*(\d+\.?\d*)\s*X2\s*(\d+\.?\d*)\s*12\s*(\d+\.?\d*)',
-        ]
-        
-        for pattern in patterns:
-            match = re.search(pattern, text)
-            if match:
-                try:
-                    odds_data['home_or_draw'] = float(match.group(1))
-                    odds_data['away_or_draw'] = float(match.group(2))
-                    odds_data['home_or_away'] = float(match.group(3))
-                    print(f"    ✅ Double Chance: {odds_data['home_or_draw']}/{odds_data['away_or_draw']}/{odds_data['home_or_away']}")
-                    return
-                except (ValueError, IndexError):
-                    continue   
+            print(f"  Selenium selectors failed: {e}")
                 
     def _handle_cookie_banner(self):
         """Handle cookie banner by clicking 'Accetta tutti' button if present."""
@@ -694,19 +490,19 @@ class SisalSeleniumScraper:
             return False
         
         try:
-            print("🍪 Checking for cookie banner...")
+            print("Checking for cookie banner...")
             # Wait for and click the "Accetta tutti" button
             cookie_button = WebDriverWait(self.driver, 5).until(
                 EC.element_to_be_clickable((By.CSS_SELECTOR, "#onetrust-accept-btn-handler"))
             )
             cookie_button.click()
-            print("✅ Cookie banner accepted")
+            print("Cookie banner accepted")
             return True
         except TimeoutException:
-            print("ℹ️ No cookie banner found")
+            print("No cookie banner found")
             return False
         except Exception as e:
-            print(f"⚠️ Cookie banner handling failed: {e}")
+            print(f"Cookie banner handling failed: {e}")
             return False
 
     def close(self):
@@ -716,9 +512,9 @@ class SisalSeleniumScraper:
                 self.driver.quit()
                 self.driver = None
                 self.wait = None
-                print("🧹 Browser closed")
+                print("Browser closed")
             except Exception as e:
-                print(f"⚠️ Error closing browser: {e}")
+                print(f"Error closing browser: {e}")
 
 
 def scrape_sisal_odds_selenium(url: str, headless: bool = True) -> Optional[BettingOdds]:
