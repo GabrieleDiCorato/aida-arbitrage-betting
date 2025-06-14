@@ -686,120 +686,27 @@ class SisalSeleniumScraper:
                     print(f"    ✅ Double Chance: {odds_data['home_or_draw']}/{odds_data['away_or_draw']}/{odds_data['home_or_away']}")
                     return
                 except (ValueError, IndexError):
-                    continue
-
+                    continue   
+                
     def _handle_cookie_banner(self):
-        """
-        Handle cookie banner by clicking "Accetta tutti" button if present.
-        Uses multiple selectors and fallback strategies for robustness.
-        """
+        """Handle cookie banner by clicking 'Accetta tutti' button if present."""
         if not self.driver:
             return False
-            
+        
         try:
             print("🍪 Checking for cookie banner...")
-            
-            # Multiple selectors for "Accetta tutti" button (most specific first)
-            cookie_selectors = [
-                # Direct text match (most reliable)
-                "//button[contains(text(), 'Accetta tutti')]",
-                "//button[contains(text(), 'ACCETTA TUTTI')]", 
-                "//a[contains(text(), 'Accetta tutti')]",
-                "//span[contains(text(), 'Accetta tutti')]",
-                
-                # Common cookie banner button patterns
-                "button[data-testid*='accept']",
-                "button[data-testid*='cookie']",
-                "button[id*='accept']",
-                "button[id*='cookie']",
-                "button[class*='accept']",
-                "button[class*='cookie']",
-                
-                # Generic patterns
-                ".cookie-accept",
-                ".accept-all",
-                "#accept-cookies",
-                "#cookie-accept",
-                "[data-accept='all']",
-                "[data-cookie='accept']"
-            ]
-            
-            # Try each selector with short timeouts
-            for selector in cookie_selectors:
-                try:
-                    if selector.startswith("//"):
-                        # XPath selector
-                        element = WebDriverWait(self.driver, 2).until(
-                            EC.element_to_be_clickable((By.XPATH, selector))
-                        )
-                    else:
-                        # CSS selector
-                        element = WebDriverWait(self.driver, 2).until(
-                            EC.element_to_be_clickable((By.CSS_SELECTOR, selector))
-                        )
-                    
-                    if element:
-                        # Verify it's actually visible and clickable
-                        if element.is_displayed() and element.is_enabled():
-                            # Scroll to element if needed
-                            self.driver.execute_script("arguments[0].scrollIntoView(true);", element)
-                            
-                            # Try clicking with different methods
-                            try:
-                                # Method 1: Regular click
-                                element.click()
-                                print(f"✅ Cookie banner closed using: {selector}")
-                                return True
-                            except Exception:
-                                try:
-                                    # Method 2: JavaScript click (bypasses some overlays)
-                                    self.driver.execute_script("arguments[0].click();", element)
-                                    print(f"✅ Cookie banner closed using JS click: {selector}")
-                                    return True
-                                except Exception:
-                                    # Method 3: Action chains
-                                    from selenium.webdriver.common.action_chains import ActionChains
-                                    ActionChains(self.driver).move_to_element(element).click().perform()
-                                    print(f"✅ Cookie banner closed using ActionChains: {selector}")
-                                    return True
-                        
-                except TimeoutException:
-                    # This selector didn't find anything, try next
-                    continue
-                except Exception as e:
-                    print(f"  ⚠️ Error with selector {selector}: {e}")
-                    continue
-            
-            # Fallback: Look for any button in common cookie banner containers
-            try:
-                container_selectors = [
-                    ".cookie-banner", ".cookie-notice", ".cookie-bar",
-                    "#cookie-banner", "#cookie-notice", "[class*='cookie']"
-                ]
-                
-                for container_selector in container_selectors:
-                    try:
-                        container = self.driver.find_element(By.CSS_SELECTOR, container_selector)
-                        if container.is_displayed():
-                            # Look for any button inside this container
-                            buttons = container.find_elements(By.TAG_NAME, "button")
-                            for button in buttons:
-                                if button.is_displayed() and button.is_enabled():
-                                    button_text = button.text.lower()
-                                    if any(keyword in button_text for keyword in ['accetta', 'accept', 'ok', 'tutti']):
-                                        button.click()
-                                        print(f"✅ Cookie banner closed using fallback button: {button_text}")
-                                        return True
-                    except:
-                        continue
-            except Exception as e:
-                print(f"  ⚠️ Fallback method error: {e}")
-            
-            print("ℹ️ No cookie banner found or already handled")
+            # Wait for and click the "Accetta tutti" button
+            cookie_button = WebDriverWait(self.driver, 5).until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, "#onetrust-accept-btn-handler"))
+            )
+            cookie_button.click()
+            print("✅ Cookie banner accepted")
+            return True
+        except TimeoutException:
+            print("ℹ️ No cookie banner found")
             return False
-            
         except Exception as e:
-            print(f"⚠️ Cookie banner handling error: {e}")
+            print(f"⚠️ Cookie banner handling failed: {e}")
             return False
 
     def close(self):
