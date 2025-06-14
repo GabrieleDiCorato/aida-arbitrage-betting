@@ -1,7 +1,7 @@
 [project]
 name = "aida-arbitrage-betting"
 version = "0.1.0"
-description = "Add your description here"
+description = "Web scraping project for analyzing live betting odds to identify arbitrage opportunities during PSG vs Atletico Madrid match"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
