@@ -42,6 +42,11 @@ class BettingOdds:
     first_half_draw: Optional[float] = None
     first_half_away_win: Optional[float] = None
     
+    # Second Half Markets
+    second_half_home_win: Optional[float] = None
+    second_half_draw: Optional[float] = None
+    second_half_away_win: Optional[float] = None
+    
     def __post_init__(self):
         """Validate the betting odds data after initialization."""
         self._validate()
@@ -53,13 +58,14 @@ class BettingOdds:
         if not self.match_id:
             raise ValueError("Match ID cannot be empty")
         if not self.home_team or not self.away_team:
-            raise ValueError("Team names cannot be empty")
-          # Validate odds are positive if provided
+            raise ValueError("Team names cannot be empty")        # Validate odds are positive if provided
         odds_fields = [
             self.home_win, self.draw, self.away_win, self.home_or_draw,
             self.away_or_draw, self.home_or_away, self.over_2_5, self.under_2_5,
             self.over_3_5, self.under_3_5,
-            self.both_teams_score_yes, self.both_teams_score_no
+            self.both_teams_score_yes, self.both_teams_score_no,
+            self.first_half_home_win, self.first_half_draw, self.first_half_away_win,
+            self.second_half_home_win, self.second_half_draw, self.second_half_away_win
         ]
         
         for odds in odds_fields:
@@ -102,6 +108,12 @@ class BettingOdds:
                     'home_win': self.first_half_home_win,
                     'draw': self.first_half_draw,                    
                     'away_win': self.first_half_away_win
+                },
+                # Second Half
+                'second_half': {
+                    'home_win': self.second_half_home_win,
+                    'draw': self.second_half_draw,                    
+                    'away_win': self.second_half_away_win
                 }
             }
         }
@@ -138,5 +150,9 @@ class BettingOdds:
               # First Half
             first_half_home_win=odds.get('first_half', {}).get('home_win'),
             first_half_draw=odds.get('first_half', {}).get('draw'),
-            first_half_away_win=odds.get('first_half', {}).get('away_win')
+            first_half_away_win=odds.get('first_half', {}).get('away_win'),
+              # Second Half
+            second_half_home_win=odds.get('second_half', {}).get('home_win'),
+            second_half_draw=odds.get('second_half', {}).get('draw'),
+            second_half_away_win=odds.get('second_half', {}).get('away_win')
         )

@@ -391,8 +391,7 @@ class SisalSeleniumScraper:
         path_parts = [part for part in path.split('/') if part]
         
         if len(path_parts) >= 2:
-            return path_parts[-1]
-        
+            return path_parts[-1]        
         # Fallback: generate from team names
         home_clean = re.sub(r'[^a-zA-Z0-9]', '_', teams[0].lower())
         away_clean = re.sub(r'[^a-zA-Z0-9]', '_', teams[1].lower())
@@ -415,7 +414,10 @@ class SisalSeleniumScraper:
             'home_or_away': None,
             'first_half_home_win': None,
             'first_half_draw': None,
-            'first_half_away_win': None
+            'first_half_away_win': None,
+            'second_half_home_win': None,
+            'second_half_draw': None,
+            'second_half_away_win': None
         }
         
         try:
@@ -456,11 +458,15 @@ class SisalSeleniumScraper:
                 'home_or_draw': 'button[data-qa*="99999_0_1"] span.tw-fr-text-paragraph-s.tw-fr-font-bold',
                 'away_or_draw': 'button[data-qa*="99999_0_2"] span.tw-fr-text-paragraph-s.tw-fr-font-bold',
                 'home_or_away': 'button[data-qa*="99999_0_3"] span.tw-fr-text-paragraph-s.tw-fr-font-bold',
-                
-                # First Half 1X2 odds - using pattern from HTML
+                  # First Half 1X2 odds - using pattern from HTML
                 'first_half_home_win': 'button[data-qa*="_14_0_1"] span.tw-fr-text-paragraph-s.tw-fr-font-bold',
                 'first_half_draw': 'button[data-qa*="_14_0_2"] span.tw-fr-text-paragraph-s.tw-fr-font-bold',
-                'first_half_away_win': 'button[data-qa*="_14_0_3"] span.tw-fr-text-paragraph-s.tw-fr-font-bold'
+                'first_half_away_win': 'button[data-qa*="_14_0_3"] span.tw-fr-text-paragraph-s.tw-fr-font-bold',
+                
+                # Second Half 1X2 odds - using pattern from HTML
+                'second_half_home_win': 'button[data-qa*="127_0_1"] span.tw-fr-text-paragraph-s.tw-fr-font-bold',
+                'second_half_draw': 'button[data-qa*="127_0_2"] span.tw-fr-text-paragraph-s.tw-fr-font-bold',
+                'second_half_away_win': 'button[data-qa*="127_0_3"] span.tw-fr-text-paragraph-s.tw-fr-font-bold'
             }
             
             for bet_type, selector in selectors.items():
