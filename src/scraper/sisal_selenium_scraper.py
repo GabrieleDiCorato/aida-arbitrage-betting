@@ -12,12 +12,11 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException, WebDriverException
+from selenium.webdriver.common.action_chains import ActionChains
 from webdriver_manager.chrome import ChromeDriverManager
 from bs4 import BeautifulSoup
 from datetime import datetime
 import re
-import time
-import random
 from typing import Optional, Dict, Any
 from urllib.parse import urlparse
 from ..datamodel.betting_odds import BettingOdds
@@ -58,11 +57,69 @@ class SisalSeleniumScraper:
             chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
             chrome_options.add_experimental_option('useAutomationExtension', False)
             
-            # Make browser appear more realistic
+            # Performance optimization - disable unnecessary resources
             chrome_options.add_argument("--disable-extensions")
             chrome_options.add_argument("--disable-plugins")
             chrome_options.add_argument("--disable-images")  # Faster loading
             chrome_options.add_argument("--disable-javascript-console")
+            chrome_options.add_argument("--disable-css")  # Skip CSS loading
+            chrome_options.add_argument("--disable-web-security")  # Skip some security checks
+            chrome_options.add_argument("--disable-features=VizDisplayCompositor")
+            
+            # Block unnecessary requests - comprehensive blocking
+            prefs = {
+                # Block images, media, and notifications
+                "profile.managed_default_content_settings.images": 2,  # Block images
+                "profile.default_content_setting_values.notifications": 2,  # Block notifications
+                "profile.managed_default_content_settings.media_stream": 2,  # Block media
+                "profile.default_content_settings.popups": 0,  # Block popups
+                "profile.managed_default_content_settings.geolocation": 2,  # Block location
+                
+                # Block ads and analytics
+                "profile.managed_default_content_settings.ads": 2,  # Block ads
+                "profile.content_settings.exceptions.ads": {},
+                "profile.default_content_setting_values.ads": 2,
+                
+                # Block plugins and flash
+                "profile.managed_default_content_settings.plugins": 2,
+                "profile.default_content_setting_values.plugins": 2,
+                
+                # Block automatic downloads
+                "profile.default_content_settings.automatic_downloads": 2,
+                
+                # Privacy settings
+                "profile.default_content_setting_values.cookies": 1,  # Allow only first-party cookies
+                "profile.block_third_party_cookies": True,
+                
+                # Language preferences
+                'intl.accept_languages': 'it-IT,it,en-US,en'
+            }
+            chrome_options.add_experimental_option("prefs", prefs)
+            
+            # Additional blocking arguments
+            chrome_options.add_argument("--disable-background-networking")
+            chrome_options.add_argument("--disable-background-timer-throttling")
+            chrome_options.add_argument("--disable-backgrounding-occluded-windows")
+            chrome_options.add_argument("--disable-renderer-backgrounding")
+            chrome_options.add_argument("--disable-component-extensions-with-background-pages")
+            chrome_options.add_argument("--disable-ipc-flooding-protection")
+            
+            # Block specific services
+            chrome_options.add_argument("--disable-sync")
+            chrome_options.add_argument("--disable-translate")
+            chrome_options.add_argument("--disable-default-apps")
+            chrome_options.add_argument("--disable-domain-reliability")
+            chrome_options.add_argument("--disable-component-update")
+            
+            # Network optimizations
+            chrome_options.add_argument("--aggressive-cache-discard")
+            chrome_options.add_argument("--disable-hang-monitor")
+            chrome_options.add_argument("--disable-prompt-on-repost")
+            
+            # Block external connections
+            chrome_options.add_argument("--disable-client-side-phishing-detection")
+            chrome_options.add_argument("--disable-features=TranslateUI,BlinkGenPropertyTrees")
+            chrome_options.add_argument("--disable-background-mode")
             
             # Set a realistic window size
             chrome_options.add_argument("--window-size=1920,1080")
@@ -75,24 +132,20 @@ class SisalSeleniumScraper:
             
             # Language preferences
             chrome_options.add_argument("--lang=it-IT")
-            chrome_options.add_experimental_option('prefs', {
-                'intl.accept_languages': 'it-IT,it,en-US,en'
-            })
             
             # Use webdriver-manager to automatically manage ChromeDriver
             service = Service(ChromeDriverManager().install())
-            
-            # Create the driver
+              # Create the driver
             self.driver = webdriver.Chrome(service=service, options=chrome_options)
             
             # Execute script to remove webdriver property
             self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
             
-            # Set page load timeout
-            self.driver.set_page_load_timeout(30)
+            # Set faster page load timeout
+            self.driver.set_page_load_timeout(15)  # Reduced from 30
             
-            # Create WebDriverWait instance
-            self.wait = WebDriverWait(self.driver, 20)
+            # Create WebDriverWait instance with shorter timeout
+            self.wait = WebDriverWait(self.driver, 10)  # Reduced from 20
             
             print("✅ Chrome WebDriver setup successful")
             return True
@@ -100,7 +153,7 @@ class SisalSeleniumScraper:
         except Exception as e:
             print(f"❌ Failed to setup Chrome WebDriver: {e}")
             return False
-    
+
     def scrape_betting_odds(self, url: str) -> Optional[BettingOdds]:
         """
         Scrape betting odds from a Sisal live event page using Selenium.
@@ -119,8 +172,8 @@ class SisalSeleniumScraper:
                 if not self._setup_driver():
                     return None
             
-            # Navigate to the page with realistic browser behavior
-            return self._scrape_with_browser_simulation(url)
+            # Navigate directly to target page (skip homepage simulation)
+            return self._scrape_direct(url)
             
         except Exception as e:
             print(f"❌ Selenium scraping error: {e}")
@@ -134,110 +187,91 @@ class SisalSeleniumScraper:
                     print("🧹 Browser closed")
                 except:
                     pass
-    
-    def _scrape_with_browser_simulation(self, url: str) -> Optional[BettingOdds]:
-        """Scrape with realistic browser behavior simulation."""
+
+    def _scrape_direct(self, url: str) -> Optional[BettingOdds]:
+        """Scrape directly without browser simulation for faster performance."""
         try:
-            print("🌐 Simulating realistic browser behavior...")
-            
-            # Step 1: Visit homepage first (like a real user)
-            print("📄 Visiting Sisal homepage...")
-            self.driver.get("https://www.sisal.it")
-            
-            # Wait for page to load and simulate reading
-            self._wait_and_simulate_reading()
-            
-            # Step 2: Navigate to live betting section
-            print("🎲 Navigating to live betting...")
-            try:
-                # Look for live betting link and click it
-                live_betting_selectors = [
-                    "a[href*='scommesse-live']",
-                    "a[href*='live']",
-                    "text:Scommesse Live",
-                    "text:Live"
-                ]
+            # Type guard to ensure driver is available
+            if not self.driver:
+                print("❌ WebDriver not initialized")
+                return None
                 
-                clicked = False
-                for selector in live_betting_selectors:
-                    try:
-                        if selector.startswith("text:"):
-                            # Use XPath for text content
-                            text = selector.replace("text:", "")
-                            element = self.driver.find_element(By.XPATH, f"//*[contains(text(), '{text}')]")
-                        else:
-                            element = self.driver.find_element(By.CSS_SELECTOR, selector)
-                        
-                        if element and element.is_displayed():
-                            self.driver.execute_script("arguments[0].click();", element)
-                            clicked = True
-                            break
-                    except:
-                        continue
-                
-                if not clicked:
-                    # Direct navigation as fallback
-                    self.driver.get("https://www.sisal.it/scommesse-live")
-                
-            except Exception as e:
-                print(f"⚠️ Could not click live betting link, using direct navigation: {e}")
-                self.driver.get("https://www.sisal.it/scommesse-live")
+            print("🎯 Direct navigation to match page...")
             
-            self._wait_and_simulate_reading()
-            
-            # Step 3: Navigate to target page
-            print("🎯 Navigating to target match page...")
+            # Navigate directly to the target page
             self.driver.get(url)
             
-            # Wait for the page to fully load
-            self._wait_for_page_load()
+            # Handle cookie banner if present
+            self._handle_cookie_banner()
             
-            # Step 4: Check if we successfully loaded the betting page
+            # Wait for the page to load with shorter timeout
+            self._wait_for_page_load_optimized()
+            
+            # Verify we're on a betting page
             if not self._verify_betting_page():
                 print("❌ Failed to load betting page properly")
                 return None
             
-            # Step 5: Extract odds data
+            # Extract odds data
             return self._extract_odds_from_page(url)
             
         except Exception as e:
-            print(f"❌ Browser simulation error: {e}")
+            print(f"❌ Direct scraping error: {e}")
             return None
-    
-    def _wait_and_simulate_reading(self):
-        """Simulate human reading behavior with random delays."""
-        delay = random.uniform(2, 5)
-        print(f"⏱️ Simulating reading time: {delay:.1f}s")
-        time.sleep(delay)
-    
-    def _wait_for_page_load(self):
-        """Wait for page to fully load with multiple checks."""
+
+    def _wait_for_page_load_optimized(self):
+        """Optimized page load wait with shorter timeouts."""
+        if not self.driver:
+            return
+            
         try:
-            # Wait for document ready state
-            self.wait.until(lambda driver: driver.execute_script("return document.readyState") == "complete")
+            # Wait for document ready with shorter timeout
+            WebDriverWait(self.driver, 8).until(
+                lambda driver: driver.execute_script("return document.readyState") == "complete"
+            )
             
-            # Additional wait for dynamic content
-            time.sleep(3)
+            # Wait specifically for betting content instead of generic delay
+            self._wait_for_betting_content()
             
-            # Check for common loading indicators and wait for them to disappear
-            loading_selectors = [
-                ".loading", ".spinner", ".loader", "[data-loading]",
-                ".skeleton", ".placeholder"
-            ]
+            print("✅ Page loaded and betting content ready")
             
-            for selector in loading_selectors:
-                try:
-                    self.wait.until(EC.invisibility_of_element_located((By.CSS_SELECTOR, selector)))
-                except TimeoutException:
-                    pass  # Element might not exist, which is fine
-            
-            print("✅ Page fully loaded")
-            
+        except TimeoutException:
+            print("⚠️ Page load timeout - proceeding anyway")
         except Exception as e:
             print(f"⚠️ Page load wait warning: {e}")
-    
+
+    def _wait_for_betting_content(self):
+        """Wait specifically for betting-related content to appear."""
+        if not self.driver:
+            return
+            
+        try:
+            # Wait for any betting-related elements to appear
+            betting_selectors = [
+                "[class*='odd']", "[class*='quote']", "[data-odd]",
+                ".market", ".bet", ".event"
+            ]
+            
+            for selector in betting_selectors:
+                try:
+                    WebDriverWait(self.driver, 3).until(
+                        EC.presence_of_element_located((By.CSS_SELECTOR, selector))
+                    )
+                    print(f"✅ Betting content loaded: {selector}")
+                    return
+                except TimeoutException:
+                    continue
+            
+            print("⚠️ No specific betting elements found, proceeding with general content")
+            
+        except Exception as e:
+            print(f"⚠️ Betting content wait error: {e}")
+
     def _verify_betting_page(self) -> bool:
         """Verify that we're on a proper betting page with odds."""
+        if not self.driver:
+            return False
+            
         try:
             # Check page title
             title = self.driver.title.lower()
@@ -261,9 +295,12 @@ class SisalSeleniumScraper:
         except Exception as e:
             print(f"❌ Page verification error: {e}")
             return False
-    
+
     def _extract_odds_from_page(self, url: str) -> Optional[BettingOdds]:
         """Extract betting odds from the current page."""
+        if not self.driver:
+            return None
+            
         try:
             print("📊 Extracting odds from page...")
             
@@ -309,11 +346,14 @@ class SisalSeleniumScraper:
         except Exception as e:
             print(f"❌ Odds extraction error: {e}")
             return None
-    
+
     def _wait_for_odds_elements(self):
-        """Wait for odds elements to appear on the page."""
+        """Wait for odds elements to appear with optimized timeouts."""
+        if not self.driver:
+            return
+            
         try:
-            # Common selectors for odds elements
+            # Common selectors for odds elements with shorter timeouts
             odds_selectors = [
                 "[data-testid*='odd']",
                 ".odd", ".odds", ".quote",
@@ -323,7 +363,9 @@ class SisalSeleniumScraper:
             
             for selector in odds_selectors:
                 try:
-                    element = self.wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, selector)))
+                    element = WebDriverWait(self.driver, 5).until(  # Reduced from 20 to 5
+                        EC.presence_of_element_located((By.CSS_SELECTOR, selector))
+                    )
                     if element:
                         print(f"✅ Found odds elements with selector: {selector}")
                         return
@@ -334,9 +376,12 @@ class SisalSeleniumScraper:
             
         except Exception as e:
             print(f"⚠️ Odds elements wait warning: {e}")
-    
+
     def _extract_match_info_selenium(self, soup: BeautifulSoup, url: str) -> Optional[Dict[str, str]]:
         """Extract match information using both Selenium and BeautifulSoup."""
+        if not self.driver:
+            return None
+            
         try:
             # Try Selenium selectors first (for dynamic content)
             match_title = None
@@ -503,9 +548,12 @@ class SisalSeleniumScraper:
             print(f"❌ Odds extraction error: {e}")
         
         return odds_data
-    
+
     def _extract_odds_selenium_selectors(self, odds_data: Dict[str, Optional[float]]):
         """Try to extract odds using Selenium element selectors."""
+        if not self.driver:
+            return
+            
         try:
             # Common patterns for odds elements
             odds_selectors = [
@@ -639,6 +687,131 @@ class SisalSeleniumScraper:
                     return
                 except (ValueError, IndexError):
                     continue
+
+    def _handle_cookie_banner(self):
+        """
+        Handle cookie banner by clicking "Accetta tutti" button if present.
+        Uses multiple selectors and fallback strategies for robustness.
+        """
+        if not self.driver:
+            return False
+            
+        try:
+            print("🍪 Checking for cookie banner...")
+            
+            # Multiple selectors for "Accetta tutti" button (most specific first)
+            cookie_selectors = [
+                # Direct text match (most reliable)
+                "//button[contains(text(), 'Accetta tutti')]",
+                "//button[contains(text(), 'ACCETTA TUTTI')]", 
+                "//a[contains(text(), 'Accetta tutti')]",
+                "//span[contains(text(), 'Accetta tutti')]",
+                
+                # Common cookie banner button patterns
+                "button[data-testid*='accept']",
+                "button[data-testid*='cookie']",
+                "button[id*='accept']",
+                "button[id*='cookie']",
+                "button[class*='accept']",
+                "button[class*='cookie']",
+                
+                # Generic patterns
+                ".cookie-accept",
+                ".accept-all",
+                "#accept-cookies",
+                "#cookie-accept",
+                "[data-accept='all']",
+                "[data-cookie='accept']"
+            ]
+            
+            # Try each selector with short timeouts
+            for selector in cookie_selectors:
+                try:
+                    if selector.startswith("//"):
+                        # XPath selector
+                        element = WebDriverWait(self.driver, 2).until(
+                            EC.element_to_be_clickable((By.XPATH, selector))
+                        )
+                    else:
+                        # CSS selector
+                        element = WebDriverWait(self.driver, 2).until(
+                            EC.element_to_be_clickable((By.CSS_SELECTOR, selector))
+                        )
+                    
+                    if element:
+                        # Verify it's actually visible and clickable
+                        if element.is_displayed() and element.is_enabled():
+                            # Scroll to element if needed
+                            self.driver.execute_script("arguments[0].scrollIntoView(true);", element)
+                            
+                            # Try clicking with different methods
+                            try:
+                                # Method 1: Regular click
+                                element.click()
+                                print(f"✅ Cookie banner closed using: {selector}")
+                                return True
+                            except Exception:
+                                try:
+                                    # Method 2: JavaScript click (bypasses some overlays)
+                                    self.driver.execute_script("arguments[0].click();", element)
+                                    print(f"✅ Cookie banner closed using JS click: {selector}")
+                                    return True
+                                except Exception:
+                                    # Method 3: Action chains
+                                    from selenium.webdriver.common.action_chains import ActionChains
+                                    ActionChains(self.driver).move_to_element(element).click().perform()
+                                    print(f"✅ Cookie banner closed using ActionChains: {selector}")
+                                    return True
+                        
+                except TimeoutException:
+                    # This selector didn't find anything, try next
+                    continue
+                except Exception as e:
+                    print(f"  ⚠️ Error with selector {selector}: {e}")
+                    continue
+            
+            # Fallback: Look for any button in common cookie banner containers
+            try:
+                container_selectors = [
+                    ".cookie-banner", ".cookie-notice", ".cookie-bar",
+                    "#cookie-banner", "#cookie-notice", "[class*='cookie']"
+                ]
+                
+                for container_selector in container_selectors:
+                    try:
+                        container = self.driver.find_element(By.CSS_SELECTOR, container_selector)
+                        if container.is_displayed():
+                            # Look for any button inside this container
+                            buttons = container.find_elements(By.TAG_NAME, "button")
+                            for button in buttons:
+                                if button.is_displayed() and button.is_enabled():
+                                    button_text = button.text.lower()
+                                    if any(keyword in button_text for keyword in ['accetta', 'accept', 'ok', 'tutti']):
+                                        button.click()
+                                        print(f"✅ Cookie banner closed using fallback button: {button_text}")
+                                        return True
+                    except:
+                        continue
+            except Exception as e:
+                print(f"  ⚠️ Fallback method error: {e}")
+            
+            print("ℹ️ No cookie banner found or already handled")
+            return False
+            
+        except Exception as e:
+            print(f"⚠️ Cookie banner handling error: {e}")
+            return False
+
+    def close(self):
+        """Close the WebDriver and clean up resources."""
+        if self.driver:
+            try:
+                self.driver.quit()
+                self.driver = None
+                self.wait = None
+                print("🧹 Browser closed")
+            except Exception as e:
+                print(f"⚠️ Error closing browser: {e}")
 
 
 def scrape_sisal_odds_selenium(url: str, headless: bool = True) -> Optional[BettingOdds]:
