@@ -280,11 +280,15 @@ class SisalSeleniumScraper:
                 # Over/Under 3.5 odds - using more specific selector
                 'button[data-qa*="350_1"] span.tw-fr-text-paragraph-s.tw-fr-font-bold',  # Under 3.5
                 'button[data-qa*="350_2"] span.tw-fr-text-paragraph-s.tw-fr-font-bold',  # Over 3.5
-                
-                # Double Chance odds - using more specific selector
+                  # Double Chance odds - using more specific selector
                 'button[data-qa*="99999_0_1"] span.tw-fr-text-paragraph-s.tw-fr-font-bold',  # 1X
                 'button[data-qa*="99999_0_2"] span.tw-fr-text-paragraph-s.tw-fr-font-bold',  # X2
-                'button[data-qa*="99999_0_3"] span.tw-fr-text-paragraph-s.tw-fr-font-bold'   # 12
+                'button[data-qa*="99999_0_3"] span.tw-fr-text-paragraph-s.tw-fr-font-bold',  # 12
+                
+                # First Half 1X2 odds - using pattern from HTML
+                'button[data-qa*="_14_0_1"] span.tw-fr-text-paragraph-s.tw-fr-font-bold',  # First half home
+                'button[data-qa*="_14_0_2"] span.tw-fr-text-paragraph-s.tw-fr-font-bold',  # First half draw
+                'button[data-qa*="_14_0_3"] span.tw-fr-text-paragraph-s.tw-fr-font-bold'   # First half away
             ]
             
             for selector in odds_selectors:
@@ -424,11 +428,17 @@ class SisalSeleniumScraper:
             'away_win': None,
             'over_2_5': None,
             'under_2_5': None,
+            'over_3_5': None,
+            'under_3_5': None,
             'both_teams_score_yes': None,
             'both_teams_score_no': None,
             'home_or_draw': None,
             'away_or_draw': None,
-            'home_or_away': None        }
+            'home_or_away': None,
+            'first_half_home_win': None,
+            'first_half_draw': None,
+            'first_half_away_win': None
+        }
         
         try:
             # Extract odds using direct CSS selectors
@@ -464,11 +474,15 @@ class SisalSeleniumScraper:
                 
                 # Over/Under 3.5 odds - using more specific selector
                 'under_3_5': 'button[data-qa*="350_1"] span.tw-fr-text-paragraph-s.tw-fr-font-bold',
-                'over_3_5': 'button[data-qa*="350_2"] span.tw-fr-text-paragraph-s.tw-fr-font-bold',
-                  # Double Chance odds - using more specific selector from HTML
+                'over_3_5': 'button[data-qa*="350_2"] span.tw-fr-text-paragraph-s.tw-fr-font-bold',                # Double Chance odds - using more specific selector from HTML
                 'home_or_draw': 'button[data-qa*="99999_0_1"] span.tw-fr-text-paragraph-s.tw-fr-font-bold',
                 'away_or_draw': 'button[data-qa*="99999_0_2"] span.tw-fr-text-paragraph-s.tw-fr-font-bold',
-                'home_or_away': 'button[data-qa*="99999_0_3"] span.tw-fr-text-paragraph-s.tw-fr-font-bold'
+                'home_or_away': 'button[data-qa*="99999_0_3"] span.tw-fr-text-paragraph-s.tw-fr-font-bold',
+                
+                # First Half 1X2 odds - using pattern from HTML
+                'first_half_home_win': 'button[data-qa*="_14_0_1"] span.tw-fr-text-paragraph-s.tw-fr-font-bold',
+                'first_half_draw': 'button[data-qa*="_14_0_2"] span.tw-fr-text-paragraph-s.tw-fr-font-bold',
+                'first_half_away_win': 'button[data-qa*="_14_0_3"] span.tw-fr-text-paragraph-s.tw-fr-font-bold'
             }
             
             for bet_type, selector in selectors.items():
