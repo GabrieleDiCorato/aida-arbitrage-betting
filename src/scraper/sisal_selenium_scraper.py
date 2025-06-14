@@ -262,33 +262,11 @@ class SisalSeleniumScraper:
         try:
             print("Waiting for betting odds elements...")
             
-            # Wait for any of the betting odds buttons to appear
+            # Wait only for 1X2 odds - the most fundamental market
             odds_selectors = [
-                # 1X2 odds - using more specific selector
                 'button[data-qa$="_1"] span.tw-fr-text-paragraph-s.tw-fr-font-bold',  # Home win
                 'button[data-qa$="_2"] span.tw-fr-text-paragraph-s.tw-fr-font-bold',  # Draw
                 'button[data-qa$="_3"] span.tw-fr-text-paragraph-s.tw-fr-font-bold',  # Away win
-                
-                # GOAL/NOGOAL odds - using more specific selector
-                'button[data-qa*="18_0_1"] span.tw-fr-text-paragraph-s.tw-fr-font-bold',  # GOAL
-                'button[data-qa*="18_0_2"] span.tw-fr-text-paragraph-s.tw-fr-font-bold',  # NOGOAL
-                
-                # Over/Under 2.5 odds - using more specific selector
-                'button[data-qa*="250_1"] span.tw-fr-text-paragraph-s.tw-fr-font-bold',  # Under 2.5
-                'button[data-qa*="250_2"] span.tw-fr-text-paragraph-s.tw-fr-font-bold',  # Over 2.5
-                
-                # Over/Under 3.5 odds - using more specific selector
-                'button[data-qa*="350_1"] span.tw-fr-text-paragraph-s.tw-fr-font-bold',  # Under 3.5
-                'button[data-qa*="350_2"] span.tw-fr-text-paragraph-s.tw-fr-font-bold',  # Over 3.5
-                  # Double Chance odds - using more specific selector
-                'button[data-qa*="99999_0_1"] span.tw-fr-text-paragraph-s.tw-fr-font-bold',  # 1X
-                'button[data-qa*="99999_0_2"] span.tw-fr-text-paragraph-s.tw-fr-font-bold',  # X2
-                'button[data-qa*="99999_0_3"] span.tw-fr-text-paragraph-s.tw-fr-font-bold',  # 12
-                
-                # First Half 1X2 odds - using pattern from HTML
-                'button[data-qa*="_14_0_1"] span.tw-fr-text-paragraph-s.tw-fr-font-bold',  # First half home
-                'button[data-qa*="_14_0_2"] span.tw-fr-text-paragraph-s.tw-fr-font-bold',  # First half draw
-                'button[data-qa*="_14_0_3"] span.tw-fr-text-paragraph-s.tw-fr-font-bold'   # First half away
             ]
             
             for selector in odds_selectors:
