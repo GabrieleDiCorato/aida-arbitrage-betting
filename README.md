@@ -55,12 +55,49 @@ storage = CSVBettingOddsStorage(
 # Create scraper with the storage
 scraper = SisalSeleniumScraper(headless=True, storage=storage)
 
-# Scrape matches - data is automatically stored
+# Single scrape - data is automatically stored
 betting_odds = scraper.scrape_betting_odds(url)
 
 # Close resources
 scraper.close()
 ```
+
+### Continuous Scraping
+
+The scraper now supports continuous data extraction at regular intervals:
+
+```python
+# Continuous scraping for live odds monitoring
+scraper = SisalSeleniumScraper(headless=True, storage=storage)
+
+# Scrape every 10 seconds for 30 minutes
+successful_scrapes = scraper.scrape_continuously(
+    url="https://www.sisal.it/scommesse/sport/calcio/match/123",
+    duration_minutes=30,
+    interval_seconds=10
+)
+
+scraper.close()
+```
+
+#### Command Line Usage
+
+```bash
+# Basic continuous scraping
+python continuous_scraping_example.py "https://www.sisal.it/scommesse/sport/calcio/match/123"
+
+# Custom parameters
+python continuous_scraping_example.py "https://..." --duration 60 --interval 15 --headless
+```
+
+#### Key Features
+
+- **Timed Sessions**: Automatically stops after specified duration
+- **Regular Intervals**: Consistent data extraction timing
+- **Session Management**: Unique CSV files for each scraping session
+- **Graceful Shutdown**: Handles interruption (Ctrl+C) properly
+- **Progress Monitoring**: Real-time statistics and progress updates
+- **Error Resilience**: Continues running even if individual scrapes fail
 
 ### Custom Storage Implementation
 

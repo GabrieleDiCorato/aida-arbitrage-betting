@@ -10,10 +10,13 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 from webdriver_manager.chrome import ChromeDriverManager
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional, Dict, Any
 from urllib.parse import urlparse
+import time
+import signal
+import sys
 from ..datamodel.betting_odds import BettingOdds
 from ..storage import CSVBettingOddsStorage, BettingOddsStorageBase
 
@@ -26,6 +29,8 @@ class SisalSeleniumScraper:
         self.driver: Optional[webdriver.Chrome] = None
         self.wait: Optional[WebDriverWait] = None
         self.storage = storage or CSVBettingOddsStorage()
+        self._is_running = False
+        self._session_start_time: Optional[datetime] = None
         
     def _setup_driver(self):
         """Setup Chrome WebDriver with minimal options for speed."""
@@ -61,8 +66,7 @@ class SisalSeleniumScraper:
             
             # Set timeouts
             self.driver.set_page_load_timeout(15)
-            self.wait = WebDriverWait(self.driver, 10)
-            
+            self.wait = WebDriverWait(self.driver, 10)            
             print("✓ Chrome WebDriver setup successful")
             return True
             
@@ -70,7 +74,7 @@ class SisalSeleniumScraper:
             print(f"✗ Failed to setup Chrome WebDriver: {e}")
             return False
 
-    def scrape_betting_odds(self, url: str) -> Optional[BettingOdds]:
+    def scrape_betting_odds(self, url: str, close_browser: bool = True) -> Optional[BettingOdds]:
         """Main scraping method."""
         try:
             print(f"Starting scraping for: {url}")
@@ -86,14 +90,16 @@ class SisalSeleniumScraper:
                 print("✗ Driver or wait not initialized")
                 return None
             
-            # Navigate to page
-            self.driver.get(url)
-            
-            # Handle cookie banner
-            self._handle_cookie_banner()
-            
-            # Wait for page to load
-            self._wait_for_page_load()
+            # Navigate to page only if not already there
+            current_url = self.driver.current_url if self.driver else ""
+            if url not in current_url:
+                self.driver.get(url)
+                
+                # Handle cookie banner
+                self._handle_cookie_banner()
+                
+                # Wait for page to load
+                self._wait_for_page_load()
             
             # Extract data
             team_names = self._extract_team_names()
@@ -114,8 +120,11 @@ class SisalSeleniumScraper:
                 **odds_data
             )
             
-            # Debug output
-            self._print_debug_info(betting_odds)
+            # Debug output (reduced for continuous scraping)
+            if not self._is_running:
+                self._print_debug_info(betting_odds)
+            else:
+                print(f"📊 {betting_odds.timestamp.strftime('%H:%M:%S')} - {betting_odds.home_team} vs {betting_odds.away_team} - 1X2: {betting_odds.home_win}/{betting_odds.draw}/{betting_odds.away_win}")
             
             # Store to file
             self.storage.store(betting_odds)
@@ -126,7 +135,7 @@ class SisalSeleniumScraper:
             print(f"✗ Scraping error: {e}")
             return None
         finally:
-            if self.driver:
+            if close_browser and self.driver:
                 self.driver.quit()
                 self.driver = None
                 print("✓ Browser closed")
@@ -334,3 +343,108 @@ class SisalSeleniumScraper:
         # Close storage
         if self.storage:
             self.storage.close()
+
+    def scrape_continuously(self, url: str, duration_minutes: int = 30, interval_seconds: int = 10) -> int:
+        """
+        Continuously scrape betting odds at regular intervals for a specified duration.
+        
+        Args:
+            url: The URL of the Sisal betting page to scrape
+            duration_minutes: How long to run the scraping session (default: 30 minutes)
+            interval_seconds: How often to scrape data (default: 10 seconds)
+            
+        Returns:
+            Number of successful scrapes performed
+        """
+        print(f"🚀 Starting continuous scraping session")
+        print(f"   📍 URL: {url}")
+        print(f"   ⏱️  Duration: {duration_minutes} minutes")
+        print(f"   🔄 Interval: {interval_seconds} seconds")
+        print(f"   📁 Storage: {self.storage.__class__.__name__}")
+        
+        # Set up signal handler for graceful shutdown
+        def signal_handler(signum, frame):
+            print(f"\n🛑 Received interrupt signal. Stopping scraping session...")
+            self._is_running = False
+        
+        signal.signal(signal.SIGINT, signal_handler)
+        
+        # Initialize session state
+        self._is_running = True
+        self._session_start_time = datetime.now()
+        session_end_time = self._session_start_time + timedelta(minutes=duration_minutes)
+        successful_scrapes = 0
+        failed_scrapes = 0
+        
+        print(f"🎯 Session started at {self._session_start_time.strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"⏰ Session will end at {session_end_time.strftime('%Y-%m-%d %H:%M:%S')}")
+        print("   Press Ctrl+C to stop early")
+        print("-" * 60)
+        
+        try:
+            # Perform initial scrape to set up the browser and page
+            print("🌐 Performing initial page setup...")
+            betting_odds = self.scrape_betting_odds(url, close_browser=False)
+            
+            if betting_odds:
+                successful_scrapes += 1
+                print(f"✅ Initial scrape successful")
+            else:
+                print(f"❌ Initial scrape failed - continuing anyway...")
+                failed_scrapes += 1
+            
+            # Main scraping loop
+            while self._is_running and datetime.now() < session_end_time:
+                try:
+                    # Wait for the specified interval
+                    time.sleep(interval_seconds)
+                    
+                    # Check if we should still be running
+                    if not self._is_running or datetime.now() >= session_end_time:
+                        break
+                    
+                    # Perform scrape (don't close browser between scrapes)
+                    betting_odds = self.scrape_betting_odds(url, close_browser=False)
+                    
+                    if betting_odds:
+                        successful_scrapes += 1
+                    else:
+                        failed_scrapes += 1
+                        
+                except KeyboardInterrupt:
+                    print(f"\n🛑 Keyboard interrupt received. Stopping...")
+                    break
+                    
+                except Exception as e:
+                    print(f"❌ Error during continuous scraping: {e}")
+                    failed_scrapes += 1
+                    time.sleep(1)  # Brief pause before retrying
+                    
+        except Exception as e:
+            print(f"❌ Critical error in continuous scraping: {e}")
+            
+        finally:
+            # Clean up
+            self._is_running = False
+            
+            # Close browser if still open
+            if self.driver:
+                try:
+                    self.driver.quit()
+                    self.driver = None
+                    print("✅ Browser closed")
+                except Exception as e:
+                    print(f"⚠️  Error closing browser: {e}")
+            
+            # Print session summary
+            session_duration = datetime.now() - self._session_start_time
+            print("-" * 60)
+            print(f"📊 SCRAPING SESSION SUMMARY")
+            print(f"   ⏱️  Duration: {session_duration}")
+            print(f"   ✅ Successful scrapes: {successful_scrapes}")
+            print(f"   ❌ Failed scrapes: {failed_scrapes}")
+            print(f"   📈 Success rate: {(successful_scrapes/(successful_scrapes+failed_scrapes)*100):.1f}%" if (successful_scrapes + failed_scrapes) > 0 else "   📈 Success rate: N/A")
+            print(f"   📁 Data saved to: {getattr(self.storage, 'get_file_path', lambda: 'Storage backend')()}")
+            print("🏁 Session completed")
+        
+        return successful_scrapes
