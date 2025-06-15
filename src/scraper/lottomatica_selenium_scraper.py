@@ -75,17 +75,18 @@ class LottomaticaSeleniumScraper:
             return False
 
     def _wait_for_page_load(self):
-        """Wait for the main betting content to load."""
+        """Wait for the page to load by checking for team names."""
         try:
             if not self.wait:
                 return
-            # Wait for betting quote containers to load
+            # Wait for team names to appear - indicates page is fully loaded
             self.wait.until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "div.quote-wrapper"))
+                EC.presence_of_element_located((By.CSS_SELECTOR, "span.event-name"))
             )
-            print("Page content loaded")
+            print("Page loaded - team names visible")
         except TimeoutException:
-            print("Page content may not be fully loaded")
+            print("Timeout waiting for team names to load")
+            raise
 
     def _extract_team_names(self) -> Optional[tuple]:
         """Extract team names from Lottomatica page structure."""
@@ -93,45 +94,22 @@ class LottomaticaSeleniumScraper:
             if not self.driver:
                 return None
             
-            # Try different selectors for team names on Lottomatica
-            selectors_to_try = [
-                # Common patterns for team names in Lottomatica
-                "h1.match-title",
-                ".match-header h1",
-                ".event-title",
-                ".teams-title",
-                # Fallback - look for any element containing "vs" or "-"
-                "//*[contains(text(), ' vs ') or contains(text(), ' - ')]"
-            ]
+            # Only use the primary selector - no fallbacks
+            element = self.driver.find_element(By.CSS_SELECTOR, ".sub-header .event-name")
+            match_text = element.text.strip()
             
-            for selector in selectors_to_try:
-                try:
-                    if selector.startswith("//"):
-                        # XPath selector
-                        element = self.driver.find_element(By.XPATH, selector)
-                    else:
-                        # CSS selector
-                        element = self.driver.find_element(By.CSS_SELECTOR, selector)
-                    
-                    match_text = element.text.strip()
-                    
-                    # Try different separators
-                    for separator in [" vs ", " - ", " V ", " v "]:
-                        if separator in match_text:
-                            teams = match_text.split(separator, 1)
-                            home_team = teams[0].strip()
-                            away_team = teams[1].strip()
-                            if home_team and away_team:
-                                print(f"Teams: {home_team} vs {away_team}")
-                                return (home_team, away_team)
-                except (NoSuchElementException, AttributeError):
-                    continue
+            if match_text and " - " in match_text:
+                teams = match_text.split(" - ", 1)
+                home_team = teams[0].strip()
+                away_team = teams[1].strip()
+                if home_team and away_team:
+                    print(f"Teams: {home_team} vs {away_team}")
+                    return (home_team, away_team)
                     
         except Exception as e:
             print(f"Error extracting team names: {e}")
         
-        print("Team names not found - using placeholder names")
-        return ("Home Team", "Away Team")
+        return None
 
     def _extract_odds(self) -> Dict[str, Optional[float]]:
         """Extract betting odds using text-based matching approach."""
@@ -147,22 +125,112 @@ class LottomaticaSeleniumScraper:
         odds_data.update(self._extract_both_teams_score())
         
         return odds_data
-
+    
     def _extract_1x2_main(self) -> Dict[str, Optional[float]]:
-        """Extract main 1X2 market odds using text matching."""
-        return self._extract_market_by_text(['1', 'X', '2'], {
-            '1': 'home_win',
-            'X': 'draw', 
-            '2': 'away_win'
-        }, "1X2 Main")
+        """Extract main 1X2 market odds using direct selector."""
+        odds_data = {}
+        
+        if not self.driver:
+            return odds_data
+        
+        try:
+            # Find the 1X2 container by looking for slot-header with "1X2" text
+            slot_headers = self.driver.find_elements(By.CSS_SELECTOR, ".slot-header")
+            x2_container = None
+            
+            for header in slot_headers:
+                if "1X2" in header.text:
+                    # Get the parent slot-container, then find the quote-wrapper
+                    slot_container = header.find_element(By.XPATH, "..")
+                    quote_wrapper = slot_container.find_element(
+                        By.CSS_SELECTOR, 
+                        '.quote-wrapper.column-3[data-spreadid="0"]'
+                    )
+                    x2_container = quote_wrapper
+                    break
+            
+            if not x2_container:
+                return odds_data
+            
+            # Extract the three quotes in order: 1, X, 2
+            wrappers = x2_container.find_elements(By.CSS_SELECTOR, ".single-quota-wrapper")
+            
+            if len(wrappers) >= 3:
+                # First wrapper: "1" (home win)
+                home_odds = self._extract_odds_from_wrapper(wrappers[0])
+                if home_odds is not None:
+                    odds_data['home_win'] = home_odds
+                
+                # Second wrapper: "X" (draw) 
+                draw_odds = self._extract_odds_from_wrapper(wrappers[1])
+                if draw_odds is not None:
+                    odds_data['draw'] = draw_odds
+                
+                # Third wrapper: "2" (away win)
+                away_odds = self._extract_odds_from_wrapper(wrappers[2])
+                if away_odds is not None:
+                    odds_data['away_win'] = away_odds
+                
+                if any(odds_data.values()):
+                    print("1X2 Main odds extracted")
+            
+        except Exception as e:
+            print(f"Error extracting 1X2 odds: {e}")
+        
+        return odds_data
 
     def _extract_double_chance(self) -> Dict[str, Optional[float]]:
-        """Extract double chance market odds."""
-        return self._extract_market_by_text(['1X', 'X2', '12'], {
-            '1X': 'home_or_draw',
-            'X2': 'away_or_draw',
-            '12': 'home_or_away'
-        }, "Double Chance")
+        """Extract double chance market odds using direct selector."""
+        odds_data = {}
+        
+        if not self.driver:
+            return odds_data
+        
+        try:
+            # Find the Double Chance container by looking for slot-header with "Doppia Chance" text
+            slot_headers = self.driver.find_elements(By.CSS_SELECTOR, ".slot-header")
+            double_chance_container = None
+            
+            for header in slot_headers:
+                if "Doppia Chance" in header.text:
+                    # Get the parent slot-container, then find the quote-wrapper
+                    slot_container = header.find_element(By.XPATH, "..")
+                    quote_wrapper = slot_container.find_element(
+                        By.CSS_SELECTOR, 
+                        '.quote-wrapper.column-3[data-spreadid="0"]'
+                    )
+                    double_chance_container = quote_wrapper
+                    break
+            
+            if not double_chance_container:
+                return odds_data
+            
+            # Extract the three quotes in order: 1X, X2, 12
+            wrappers = double_chance_container.find_elements(By.CSS_SELECTOR, ".single-quota-wrapper")
+            
+            if len(wrappers) >= 3:
+                # First wrapper: "1X" (home or draw)
+                home_or_draw_odds = self._extract_odds_from_wrapper(wrappers[0])
+                if home_or_draw_odds is not None:
+                    odds_data['home_or_draw'] = home_or_draw_odds
+                
+                # Second wrapper: "X2" (away or draw) 
+                away_or_draw_odds = self._extract_odds_from_wrapper(wrappers[1])
+                if away_or_draw_odds is not None:
+                    odds_data['away_or_draw'] = away_or_draw_odds
+                
+                # Third wrapper: "12" (home or away)
+                home_or_away_odds = self._extract_odds_from_wrapper(wrappers[2])
+                if home_or_away_odds is not None:
+                    odds_data['home_or_away'] = home_or_away_odds
+                
+                if any(odds_data.values()):
+                    print("Double Chance odds extracted")
+            
+        except Exception as e:
+            print(f"Error extracting Double Chance odds: {e}")
+        
+        return odds_data
 
     def _extract_over_under(self) -> Dict[str, Optional[float]]:
         """Extract over/under goals market odds."""
@@ -172,78 +240,76 @@ class LottomaticaSeleniumScraper:
             return odds_data
         
         try:
-            # Look for Over/Under containers with specific data-spreadid values
-            # Priority: 2.5, then 3.5, then others
-            target_spreads = ['2.5', '3.5', '1.5', '4.5']
-            
-            for spread in target_spreads:
-                container_selector = f'div.quote-wrapper.column-2[data-spreadid="{spread}"]'
-                containers = self.driver.find_elements(By.CSS_SELECTOR, container_selector)
+            # Only look for 2.5 and 3.5 spreads - most common
+            for spread in ['2.5', '3.5']:
+                container = self.driver.find_element(By.CSS_SELECTOR, f'div.quote-wrapper.column-2[data-spreadid="{spread}"]')
+                wrappers = container.find_elements(By.CSS_SELECTOR, ".single-quota-wrapper")
                 
-                for container in containers:
-                    wrappers = container.find_elements(By.CSS_SELECTOR, ".single-quota-wrapper")
-                    found_markets = {}
+                under_odds = None
+                over_odds = None
+                
+                for wrapper in wrappers:
+                    market_text = wrapper.find_element(By.CSS_SELECTOR, ".item--mercato span").text.strip()
                     
-                    # Extract Under and Over odds from this spread
-                    for wrapper in wrappers:
-                        try:
-                            market_text_element = wrapper.find_element(By.CSS_SELECTOR, ".item--mercato span")
-                            market_text = market_text_element.text.strip()
-                            
-                            if market_text in ['Under', 'Over']:
-                                odds_value = self._extract_odds_from_wrapper(wrapper)
-                                found_markets[market_text] = odds_value
-                                
-                        except (NoSuchElementException, AttributeError):
-                            continue
-                    
-                    # If we found both Under and Over for this spread, use it
-                    if len(found_markets) == 2 and 'Under' in found_markets and 'Over' in found_markets:
-                        if spread == '2.5':
-                            odds_data['under_2_5'] = found_markets['Under']
-                            odds_data['over_2_5'] = found_markets['Over']
-                        elif spread == '3.5':
-                            odds_data['under_3_5'] = found_markets['Under']
-                            odds_data['over_3_5'] = found_markets['Over']
-                        elif spread == '1.5':
-                            odds_data['under_1_5'] = found_markets['Under']
-                            odds_data['over_1_5'] = found_markets['Over']
-                        
+                    if market_text == "Under":
+                        under_odds = self._extract_odds_from_wrapper(wrapper)
+                    elif market_text == "Over":
+                        over_odds = self._extract_odds_from_wrapper(wrapper)
+                
+                # Only add if we found both Under and Over
+                if under_odds is not None and over_odds is not None:
+                    if spread == '2.5':
+                        odds_data['under_2_5'] = under_odds
+                        odds_data['over_2_5'] = over_odds
+                        print(f"Over/Under {spread} odds extracted")
+                    elif spread == '3.5':
+                        odds_data['under_3_5'] = under_odds
+                        odds_data['over_3_5'] = over_odds
                         print(f"Over/Under {spread} odds extracted")
                         
-                        # Prioritize 2.5, but continue to get 3.5 if available
-                        if spread == '2.5':
-                            continue  # Try to get 3.5 as well
-                        elif spread == '3.5' and ('under_2_5' in odds_data or 'over_2_5' in odds_data):
-                            break  # We have both 2.5 and 3.5, we're done
-                        else:
-                            break  # We have at least one set of O/U odds
-                            
-        except Exception as e:
-            print(f"Error extracting Over/Under odds: {e}")
+        except Exception:
+            # Silent fail - if spreads not found, just return empty
+            pass
         
         return odds_data
 
     def _extract_both_teams_score(self) -> Dict[str, Optional[float]]:
-        """Extract both teams to score (GOAL/NOGOAL) market odds."""
-        # Look for Goal/NoGoal markets - we'll need to identify the HTML structure
-        # Common patterns might be "GOAL"/"NOGOAL", "SI"/"NO", "YES"/"NO"
+        """Extract both teams to score (Gol/NoGol) market odds using optimized selector."""
+        odds_data = {}
         
-        # Try different text patterns for both teams to score
-        possible_patterns = [
-            (['GOAL', 'NOGOAL'], {'GOAL': 'both_teams_score_yes', 'NOGOAL': 'both_teams_score_no'}),
-            (['SI', 'NO'], {'SI': 'both_teams_score_yes', 'NO': 'both_teams_score_no'}),
-            (['YES', 'NO'], {'YES': 'both_teams_score_yes', 'NO': 'both_teams_score_no'}),
-            (['Gol', 'No Gol'], {'Gol': 'both_teams_score_yes', 'No Gol': 'both_teams_score_no'})
-        ]
+        if not self.driver:
+            return odds_data
         
-        for market_texts, text_mapping in possible_patterns:
-            odds_data = self._extract_market_by_text(market_texts, text_mapping, "Both Teams Score")
-            if any(odds_data.values()):
-                return odds_data
+        try:
+            # Use direct XPath to find Gol/NoGol section and extract GG (both teams score) quote
+            gg_element = self.driver.find_element(By.XPATH, 
+                "//span[normalize-space(text())='Gol/NoGol']/ancestor::div[contains(@class, 'slot-container')]//span[text()='GG']/following-sibling::div//span")
+            if gg_element:
+                odds_text = gg_element.text.strip()
+                if odds_text:
+                    gg_value = float(odds_text.replace(',', '.'))
+                    if gg_value > 1.0:  # Sanity check
+                        odds_data['both_teams_score_yes'] = gg_value
+        except:
+            pass
         
-        # If no standard pattern found, return empty
-        return {}
+        try:
+            # Use direct XPath to find Gol/NoGol section and extract NG (not both teams score) quote
+            ng_element = self.driver.find_element(By.XPATH, 
+                "//span[normalize-space(text())='Gol/NoGol']/ancestor::div[contains(@class, 'slot-container')]//span[text()='NG']/following-sibling::div//span")
+            if ng_element:
+                odds_text = ng_element.text.strip()
+                if odds_text:
+                    ng_value = float(odds_text.replace(',', '.'))
+                    if ng_value > 1.0:  # Sanity check
+                        odds_data['both_teams_score_no'] = ng_value
+        except:
+            pass
+        
+        if any(odds_data.values()):
+            print("Gol/NoGol odds extracted")
+            
+        return odds_data
 
     def _extract_market_by_text(self, market_texts: list, text_to_key_mapping: Dict[str, str], market_name: str) -> Dict[str, Optional[float]]:
         """Extract odds for a market by matching market text within quote containers."""
@@ -505,8 +571,7 @@ class LottomaticaSeleniumScraper:
             
             # Handle cookie banner
             self._handle_cookie_banner()
-            
-            # Wait for page to load
+              # Wait for page to load
             self._wait_for_page_load()
             
             return True
@@ -518,17 +583,17 @@ class LottomaticaSeleniumScraper:
     def _extract_betting_data(self, url: str) -> Optional[BettingOdds]:
         """Extract betting odds data from the current page."""
         try:
-            # Extract team names
+            # Extract team names - if not found, skip this scrape
             team_names = self._extract_team_names()
             if not team_names:
-                print("Could not extract team names")
+                print("Could not extract team names - skipping")
                 return None
             
             # Extract odds data
             odds_data = self._extract_odds()
             match_id = self._generate_match_id(url)
             
-            # Create BettingOdds instance
+            # Create BettingOdds instance with only available data
             betting_odds = BettingOdds(
                 timestamp=datetime.now(),
                 source="Lottomatica",
