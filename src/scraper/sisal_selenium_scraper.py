@@ -11,22 +11,21 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 from webdriver_manager.chrome import ChromeDriverManager
 from datetime import datetime
-import csv
 from pathlib import Path
 from typing import Optional, Dict, Any
 from urllib.parse import urlparse
 from ..datamodel.betting_odds import BettingOdds
+from ..storage import CSVBettingOddsStorage, BettingOddsStorageBase
 
 
 class SisalSeleniumScraper:
     """Simplified Sisal scraper focused on speed and reliability."""
     
-    def __init__(self, headless: bool = True):
+    def __init__(self, headless: bool = True, storage: Optional[BettingOddsStorageBase] = None):
         self.headless = headless
         self.driver: Optional[webdriver.Chrome] = None
         self.wait: Optional[WebDriverWait] = None
-        self.csv_file_path = None
-        self.session_id = None
+        self.storage = storage or CSVBettingOddsStorage()
         
     def _setup_driver(self):
         """Setup Chrome WebDriver with minimal options for speed."""
@@ -76,6 +75,10 @@ class SisalSeleniumScraper:
         try:
             print(f"Starting scraping for: {url}")
             
+            # Initialize storage
+            if not self.storage._is_initialized:
+                self.storage.initialize()
+            
             if not self.driver and not self._setup_driver():
                 return None
             
@@ -114,8 +117,8 @@ class SisalSeleniumScraper:
             # Debug output
             self._print_debug_info(betting_odds)
             
-            # Save to CSV
-            self._save_betting_odds_to_csv(betting_odds)
+            # Store to file
+            self.storage.store(betting_odds)
             
             return betting_odds
             
@@ -345,70 +348,8 @@ class SisalSeleniumScraper:
         
         print(f"===============================\n")
 
-    def _init_csv_session(self):
-        """Initialize CSV session."""
-        if self.session_id is None:
-            self.session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
-            
-        csv_filename = f"sisal_odds_{self.session_id}.csv"
-        self.csv_file_path = Path("data") / csv_filename
-        self.csv_file_path.parent.mkdir(parents=True, exist_ok=True)
-        
-        if not self.csv_file_path.exists():
-            self._write_csv_header()
-
-    def _write_csv_header(self):
-        """Write CSV header."""
-        fieldnames = [
-            'timestamp', 'source', 'match_id', 'home_team', 'away_team',
-            'home_win', 'draw', 'away_win',
-            'home_or_draw', 'away_or_draw', 'home_or_away',
-            'over_2_5', 'under_2_5', 'over_3_5', 'under_3_5',
-            'both_teams_score_yes', 'both_teams_score_no'
-        ]
-        
-        with open(str(self.csv_file_path), 'w', newline='', encoding='utf-8') as csvfile:
-            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-            writer.writeheader()
-
-    def _save_betting_odds_to_csv(self, betting_odds: BettingOdds):
-        """Save betting odds to CSV file."""
-        try:
-            if self.csv_file_path is None:
-                self._init_csv_session()
-            
-            csv_row = {
-                'timestamp': betting_odds.timestamp.isoformat(),
-                'source': betting_odds.source,
-                'match_id': betting_odds.match_id,
-                'home_team': betting_odds.home_team,
-                'away_team': betting_odds.away_team,
-                'home_win': betting_odds.home_win,
-                'draw': betting_odds.draw,
-                'away_win': betting_odds.away_win,
-                'home_or_draw': betting_odds.home_or_draw,
-                'away_or_draw': betting_odds.away_or_draw,
-                'home_or_away': betting_odds.home_or_away,
-                'over_2_5': betting_odds.over_2_5,
-                'under_2_5': betting_odds.under_2_5,
-                'over_3_5': betting_odds.over_3_5,
-                'under_3_5': betting_odds.under_3_5,
-                'both_teams_score_yes': betting_odds.both_teams_score_yes,
-                'both_teams_score_no': betting_odds.both_teams_score_no
-            }
-            
-            with open(str(self.csv_file_path), 'a', newline='', encoding='utf-8') as csvfile:
-                fieldnames = list(csv_row.keys())
-                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-                writer.writerow(csv_row)
-            
-            print(f"✓ Saved to CSV: {self.csv_file_path}")
-            
-        except Exception as e:
-            print(f"✗ CSV save error: {e}")
-
     def close(self):
-        """Close WebDriver and clean up."""
+        """Close WebDriver and clean up storage."""
         if self.driver:
             try:
                 self.driver.quit()
@@ -416,3 +357,7 @@ class SisalSeleniumScraper:
                 print("✓ Browser closed")
             except Exception as e:
                 print(f"✗ Error closing browser: {e}")
+        
+        # Close storage
+        if self.storage:
+            self.storage.close()

@@ -22,6 +22,67 @@ Arbitrage betting is a strategy that involves placing bets on all possible outco
 - **Database**: Local MongoDB instance for real-time data storage
 - **Analysis**: Data analysis notebooks to identify arbitrage opportunities
 
+## Refactored Architecture
+
+The project has been refactored to use a modular, flexible storage system with clear separation of concerns:
+
+### Storage Module (`src/storage/`)
+
+- **`BettingOddsStorageBase`**: Abstract base class defining the storage interface
+- **`CSVBettingOddsStorage`**: CSV file-based storage implementation
+- **Session Management**: Each scraping session gets a unique identifier
+- **Encapsulation**: All storage logic is contained within dedicated storage classes
+
+### Key Features
+
+1. **Modular Design**: Easy to add new storage backends (JSON, Database, etc.)
+2. **Session-based Storage**: Each scraping session creates uniquely identified files
+3. **Clean Separation**: Scrapers focus on scraping, storage handles persistence
+4. **Flexible Interface**: Support for single record and batch operations
+
+### Usage Example
+
+```python
+from src.scraper.sisal_selenium_scraper import SisalSeleniumScraper
+from src.storage import CSVBettingOddsStorage
+
+# Create storage with custom session
+storage = CSVBettingOddsStorage(
+    session_id="match_20240101",
+    output_dir="data/matches"
+)
+
+# Create scraper with the storage
+scraper = SisalSeleniumScraper(headless=True, storage=storage)
+
+# Scrape matches - data is automatically stored
+betting_odds = scraper.scrape_betting_odds(url)
+
+# Close resources
+scraper.close()
+```
+
+### Custom Storage Implementation
+
+You can easily create custom storage backends by inheriting from `BettingOddsStorageBase`:
+
+```python
+from src.storage import BettingOddsStorageBase
+
+class DatabaseStorage(BettingOddsStorageBase):
+    def initialize(self):
+        # Connect to database
+        pass
+    
+    def store(self, betting_odds):
+        # Store to database
+        pass
+    
+    def close(self):
+        # Close database connection
+        pass
+```
+
 ## Technical Stack
 
 - **Python**: Main programming language

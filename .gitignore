@@ -197,3 +197,4 @@ cython_debug/
 # working and internal directories
 tmp/
 html/
+notebooks/data/
