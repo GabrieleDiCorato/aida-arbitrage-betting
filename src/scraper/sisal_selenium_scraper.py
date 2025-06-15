@@ -217,12 +217,16 @@ class SisalSeleniumScraper:
             
             # Wait for odds elements to appear
             self._wait_for_odds_elements()
-            
-            # Extract match information
+              # Extract match information
             match_info = self._extract_match_info_selenium(url)
             if not match_info:
-                print("Could not extract match information")
-                return None
+                print("Could not extract match information, using fallback")
+                # Create fallback match info from URL
+                match_info = {
+                    'home_team': 'Unknown Home',
+                    'away_team': 'Unknown Away',
+                    'match_id': self._generate_fallback_match_id(url)
+                }
             
             print(f"Match: {match_info['home_team']} vs {match_info['away_team']}")
             
@@ -233,9 +237,16 @@ class SisalSeleniumScraper:
             odds_found = sum(1 for v in odds_data.values() if v is not None)
             print(f"Extracted {odds_found} odds values")
             
+            # Be more lenient - allow creation with at least some basic odds
+            basic_odds_found = sum(1 for k, v in odds_data.items() 
+                                 if k in ['home_win', 'draw', 'away_win'] and v is not None)
+            
             if odds_found == 0:
-                print("No odds found")
+                print("No odds found at all")
                 return None
+            elif basic_odds_found == 0:
+                print("No basic 1X2 odds found, but other odds available")
+                # Continue anyway - some odds markets might still be valuable
             
             # Create BettingOdds instance
             betting_odds = BettingOdds(
@@ -261,8 +272,7 @@ class SisalSeleniumScraper:
             
         try:
             print("Waiting for betting odds elements...")
-            
-            # Wait only for 1X2 odds - the most fundamental market
+              # Wait only for 1X2 odds - the most fundamental market
             odds_selectors = [
                 'button[data-qa$="_1"] span.tw-fr-text-paragraph-s.tw-fr-font-bold',  # Home win
                 'button[data-qa$="_2"] span.tw-fr-text-paragraph-s.tw-fr-font-bold',  # Draw
@@ -271,13 +281,16 @@ class SisalSeleniumScraper:
             
             for selector in odds_selectors:
                 try:
-                    element = WebDriverWait(self.driver, 5).until(
+                    element = WebDriverWait(self.driver, 3).until(  # Reduced timeout
                         EC.presence_of_element_located((By.CSS_SELECTOR, selector))
                     )
                     if element:
                         print("Found betting odds elements")
                         return
                 except TimeoutException:
+                    continue  # Try next selector
+                except Exception as e:
+                    print(f"Error waiting for selector {selector}: {e}")
                     continue
             
             print("No betting odds elements found, proceeding anyway")
@@ -293,8 +306,7 @@ class SisalSeleniumScraper:
         try:
             # Try specific selector for match title from the page structure
             match_title = None
-            
-            # Primary selector: team names in dropdown toggle button
+              # Primary selector: team names in dropdown toggle button
             try:
                 element = self.driver.find_element(By.CSS_SELECTOR, 'button[data-qa="regulator-live-detail-dropdown-toggle"] div')
                 match_title = element.text.strip()
@@ -302,10 +314,13 @@ class SisalSeleniumScraper:
                     print(f"Found match title from dropdown: {match_title}")
                 else:
                     match_title = None
+            except NoSuchElementException:
+                print("Dropdown selector not found")
+                match_title = None
             except Exception as e:
                 print(f"Could not extract from dropdown selector: {e}")
-            
-            # Fallback selectors
+                match_title = None
+              # Fallback selectors with better error handling
             if not match_title:
                 fallback_selectors = ["h1", "h2", "title", ".match-title", ".event-title"]
                 for selector in fallback_selectors:
@@ -314,8 +329,12 @@ class SisalSeleniumScraper:
                         text = element.text.strip()
                         if text and (' - ' in text or ' vs ' in text or ' v ' in text):
                             match_title = text
+                            print(f"Found match title from {selector}: {match_title}")
                             break
-                    except:
+                    except NoSuchElementException:
+                        continue  # Try next selector
+                    except Exception as e:
+                        print(f"Error with selector {selector}: {e}")
                         continue
             
             # Fallback to URL parsing
@@ -327,18 +346,32 @@ class SisalSeleniumScraper:
                 return None
             
             print(f"Found match title: {match_title}")
-            
-            # Parse team names
+              # Parse team names with better error handling
             teams = self._parse_team_names(match_title)
             if not teams:
                 print(f"Could not parse teams from: {match_title}")
-                return None
+                # Try to create some basic team names as fallback
+                if match_title:
+                    # Just split on common separators and take first two parts
+                    for delimiter in [' - ', ' vs ', ' v ', '–', '—']:
+                        if delimiter in match_title:
+                            parts = match_title.split(delimiter, 1)
+                            if len(parts) >= 2:
+                                teams = (parts[0].strip()[:50], parts[1].strip()[:50])  # Limit length
+                                print(f"Created fallback teams: {teams}")
+                                break
+                
+                if not teams:
+                    # Ultimate fallback
+                    teams = ("Team A", "Team B")
+                    print("Using ultimate fallback team names")
             
             # Generate match ID from URL
             match_id = self._generate_match_id(url, teams)
             
             return {
-                'home_team': teams[0],                'away_team': teams[1],
+                'home_team': teams[0],                
+                'away_team': teams[1],
                 'match_id': match_id
             }
             
@@ -396,6 +429,27 @@ class SisalSeleniumScraper:
         home_clean = re.sub(r'[^a-zA-Z0-9]', '_', teams[0].lower())
         away_clean = re.sub(r'[^a-zA-Z0-9]', '_', teams[1].lower())
         return f"{home_clean}_vs_{away_clean}"
+    
+    def _generate_fallback_match_id(self, url: str) -> str:
+        """Generate a fallback match ID from URL when match info extraction fails."""
+        try:
+            # Try to extract something meaningful from the URL
+            path = urlparse(url).path
+            path_parts = [part for part in path.split('/') if part]
+            
+            if len(path_parts) >= 2:
+                return path_parts[-1]
+            
+            # Ultimate fallback: use timestamp and URL hash
+            import hashlib
+            url_hash = hashlib.md5(url.encode()).hexdigest()[:8]
+            timestamp = str(int(datetime.now().timestamp()))[-6:]
+            return f"fallback_{timestamp}_{url_hash}"
+            
+        except Exception:
+            # Even more basic fallback
+            import time
+            return f"unknown_match_{int(time.time())}"
     
     def _extract_odds_selenium(self) -> Dict[str, Optional[float]]:
         """Extract betting odds using direct CSS selectors."""
@@ -473,15 +527,33 @@ class SisalSeleniumScraper:
                 try:
                     element = self.driver.find_element(By.CSS_SELECTOR, selector)
                     odd_text = element.text.strip()
-                    odd_value = float(odd_text)
-                    odds_data[bet_type] = odd_value
-                    print(f"  {bet_type}: {odd_value}")
+                    
+                    # Validate and convert odds value
+                    if odd_text and odd_text != '-' and odd_text != 'N/A':
+                        # Clean the text (remove any non-numeric characters except decimal point)
+                        cleaned_text = re.sub(r'[^\d.]', '', odd_text)
+                        if cleaned_text and '.' in cleaned_text or cleaned_text.isdigit():
+                            odd_value = float(cleaned_text)
+                            # Validate odds range (typically between 1.01 and 1000)
+                            if 1.0 <= odd_value <= 1000.0:
+                                odds_data[bet_type] = odd_value
+                                print(f"  {bet_type}: {odd_value}")
+                            else:
+                                print(f"  {bet_type}: Invalid odds value {odd_value} (out of range)")
+                        else:
+                            print(f"  {bet_type}: Invalid odds format '{odd_text}'")
+                    else:
+                        print(f"  {bet_type}: Empty or invalid odds text '{odd_text}'")
+                        
+                except NoSuchElementException:
+                    print(f"  {bet_type}: Element not found (market may not be available)")
+                except ValueError as e:                    print(f"  {bet_type}: Value conversion error - {e}")
                 except Exception as e:
-                    print(f"  Failed to extract {bet_type}: {e}")
+                    print(f"  {bet_type}: Unexpected error - {e}")
                     
         except Exception as e:
             print(f"  Selenium selectors failed: {e}")
-                
+
     def _handle_cookie_banner(self):
         """Handle cookie banner by clicking 'Accetta tutti' button if present."""
         if not self.driver:
@@ -489,8 +561,8 @@ class SisalSeleniumScraper:
         
         try:
             print("Checking for cookie banner...")
-            # Wait for and click the "Accetta tutti" button
-            cookie_button = WebDriverWait(self.driver, 5).until(
+            # Wait for and click the "Accetta tutti" button with shorter timeout
+            cookie_button = WebDriverWait(self.driver, 3).until(  # Reduced from 5
                 EC.element_to_be_clickable((By.CSS_SELECTOR, "#onetrust-accept-btn-handler"))
             )
             cookie_button.click()
