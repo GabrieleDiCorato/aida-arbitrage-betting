@@ -172,41 +172,135 @@ class SisalSeleniumScraper:
         if not self.driver:
             return odds_data
         
-        # Define selectors based on the HTML analysis
-        selectors = {
-            'home_win': 'button[data-qa*="_3_0_1"] span',
-            'draw': 'button[data-qa*="_3_0_2"] span', 
-            'away_win': 'button[data-qa*="_3_0_3"] span',
-            'home_or_draw': 'button[data-qa*="_99999_0_1"] span',
-            'away_or_draw': 'button[data-qa*="_99999_0_2"] span',
-            'home_or_away': 'button[data-qa*="_99999_0_3"] span',
-            'under_2_5': 'button[data-qa*="450_1"] span',
-            'over_2_5': 'button[data-qa*="450_2"] span',
-            'both_teams_score_yes': 'button[data-qa*="_8333_4_1"] span',
-            'both_teams_score_no': 'button[data-qa*="_8333_4_2"] span',
-        }
+        # Expand collapsed sections if needed
+        self._expand_betting_sections()
         
-        for bet_type, selector in selectors.items():
-            try:
-                element = self.driver.find_element(By.CSS_SELECTOR, selector)
-                odds_text = element.text.strip()
-                
-                if odds_text and odds_text != '-':
-                    odds_value = float(odds_text)
-                    if 1.0 <= odds_value <= 1000.0:
-                        odds_data[bet_type] = odds_value
-                        print(f"✓ {bet_type}: {odds_value}")
-                    else:
-                        print(f"⚠ {bet_type}: Invalid odds value {odds_value}")
-                        
-            except NoSuchElementException:
-                print(f"⚠ {bet_type}: Not available")
-            except (ValueError, AttributeError) as e:
-                print(f"⚠ {bet_type}: Conversion error - {e}")
-            except Exception as e:
-                print(f"⚠ {bet_type}: Unexpected error - {e}")
+        # Extract each market using data-qa patterns
+        odds_data.update(self._extract_1x2_main())
+        odds_data.update(self._extract_double_chance())
+        odds_data.update(self._extract_over_under())
+        odds_data.update(self._extract_both_teams_score())
         
         return odds_data
+
+    def _expand_betting_sections(self):
+        """Expand collapsed betting sections if they exist."""
+        try:
+            if not self.driver:
+                return
+                
+            # Look for Arrow-Down buttons to expand sections
+            expand_buttons = self.driver.find_elements(
+                By.CSS_SELECTOR, 
+                'button[icon="Arrow-Down"] i.icon-Arrow-Down'
+            )
+            
+            for button in expand_buttons:
+                try:
+                    # Click to expand if the section is collapsed
+                    parent_button = button.find_element(By.XPATH, "..")
+                    parent_button.click()
+                    print(f"✓ Expanded betting section")
+                except Exception as e:
+                    print(f"⚠ Could not expand section: {e}")
+                    
+        except Exception as e:
+            print(f"⚠ Error expanding sections: {e}")
+
+    def _extract_1x2_main(self) -> Dict[str, Optional[float]]:
+        """Extract main 1X2 market odds."""
+        return self._extract_market_by_pattern({
+            'home_win': '_3_0_1',
+            'draw': '_3_0_2', 
+            'away_win': '_3_0_3'
+        }, "1X2 Main")
+
+    def _extract_double_chance(self) -> Dict[str, Optional[float]]:
+        """Extract double chance market odds."""
+        return self._extract_market_by_pattern({
+            'home_or_draw': '_99999_0_1',
+            'away_or_draw': '_99999_0_2',
+            'home_or_away': '_99999_0_3'
+        }, "Double Chance")
+
+    def _extract_over_under(self) -> Dict[str, Optional[float]]:
+        """Extract over/under goals market odds."""
+        # Try different patterns for O/U 2.5 and 3.5
+        odds_data = {}
+        
+        # O/U 2.5 patterns (based on HTML analysis)
+        ou_25_patterns = {
+            'under_2_5': ['_7989_250_1', '_450_1'],  
+            'over_2_5': ['_7989_250_2', '_450_2']
+        }
+        
+        # O/U 3.5 patterns (estimated)
+        ou_35_patterns = {
+            'under_3_5': ['_7989_350_1', '_350_1'],
+            'over_3_5': ['_7989_350_2', '_350_2']
+        }
+        
+        # Extract O/U 2.5
+        for bet_type, patterns in ou_25_patterns.items():
+            odds_data[bet_type] = self._try_extract_with_patterns(patterns)
+            
+        # Extract O/U 3.5
+        for bet_type, patterns in ou_35_patterns.items():
+            odds_data[bet_type] = self._try_extract_with_patterns(patterns)
+            
+        if any(odds_data.values()):
+            print(f"✓ Over/Under odds extracted")
+            
+        return odds_data
+
+    def _extract_both_teams_score(self) -> Dict[str, Optional[float]]:
+        """Extract both teams to score (GOAL/NOGOAL) market odds."""
+        # Based on HTML analysis: "Goal/NoGoal" section
+        return self._extract_market_by_pattern({
+            'both_teams_score_yes': '_8333_1_1',  # Might be "TEAM 1" button
+            'both_teams_score_no': '_8333_1_2'    # Might be "NESSUNO" button
+        }, "Goal/NoGoal")
+
+    def _extract_market_by_pattern(self, patterns: Dict[str, str], market_name: str) -> Dict[str, Optional[float]]:
+        """Extract odds for a market using data-qa patterns."""
+        odds_data = {}
+        found_any = False
+        
+        for bet_type, pattern in patterns.items():
+            odds_data[bet_type] = self._try_extract_with_patterns([pattern])
+            if odds_data[bet_type] is not None:
+                found_any = True
+                
+        if found_any:
+            print(f"✓ {market_name} odds extracted")
+            
+        return odds_data
+
+    def _try_extract_with_patterns(self, patterns: list) -> Optional[float]:
+        """Try to extract odds using multiple data-qa patterns."""
+        if not self.driver:
+            return None
+            
+        for pattern in patterns:
+            try:
+                # Look for button with data-qa containing the pattern
+                selector = f'button[data-qa*="{pattern}"] span'
+                elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                
+                for element in elements:
+                    try:
+                        odds_text = element.text.strip()
+                        if odds_text and odds_text.replace('.', '').replace(',', '').isdigit():
+                            odds_value = float(odds_text.replace(',', '.'))
+                            if odds_value > 1.0:  # Sanity check
+                                return odds_value
+                    except (ValueError, AttributeError):
+                        continue
+                        
+            except Exception:
+                continue
+                
+        return None
 
     def _generate_match_id(self, url: str) -> str:
         """Generate match ID from URL."""
@@ -238,16 +332,16 @@ class SisalSeleniumScraper:
         print(f"Timestamp: {betting_odds.timestamp}")
         
         if any([betting_odds.home_win, betting_odds.draw, betting_odds.away_win]):
-            print(f"1X2: {betting_odds.home_win} | {betting_odds.draw} | {betting_odds.away_win}")
+            print(f"1X2: {betting_odds.home_win} / {betting_odds.draw} / {betting_odds.away_win}")
         
         if any([betting_odds.home_or_draw, betting_odds.away_or_draw, betting_odds.home_or_away]):
-            print(f"Double Chance: 1X={betting_odds.home_or_draw} | X2={betting_odds.away_or_draw} | 12={betting_odds.home_or_away}")
+            print(f"Double Chance: {betting_odds.home_or_draw} / {betting_odds.away_or_draw} / {betting_odds.home_or_away}")
         
         if any([betting_odds.over_2_5, betting_odds.under_2_5]):
-            print(f"Over/Under 2.5: O={betting_odds.over_2_5} | U={betting_odds.under_2_5}")
+            print(f"O/U 2.5: {betting_odds.over_2_5} / {betting_odds.under_2_5}")
         
         if any([betting_odds.both_teams_score_yes, betting_odds.both_teams_score_no]):
-            print(f"Both Teams Score: Yes={betting_odds.both_teams_score_yes} | No={betting_odds.both_teams_score_no}")
+            print(f"BTTS: {betting_odds.both_teams_score_yes} / {betting_odds.both_teams_score_no}")
         
         print(f"===============================\n")
 
@@ -270,9 +364,7 @@ class SisalSeleniumScraper:
             'home_win', 'draw', 'away_win',
             'home_or_draw', 'away_or_draw', 'home_or_away',
             'over_2_5', 'under_2_5', 'over_3_5', 'under_3_5',
-            'both_teams_score_yes', 'both_teams_score_no',
-            'first_half_home_win', 'first_half_draw', 'first_half_away_win',
-            'second_half_home_win', 'second_half_draw', 'second_half_away_win'
+            'both_teams_score_yes', 'both_teams_score_no'
         ]
         
         with open(str(self.csv_file_path), 'w', newline='', encoding='utf-8') as csvfile:
@@ -302,13 +394,7 @@ class SisalSeleniumScraper:
                 'over_3_5': betting_odds.over_3_5,
                 'under_3_5': betting_odds.under_3_5,
                 'both_teams_score_yes': betting_odds.both_teams_score_yes,
-                'both_teams_score_no': betting_odds.both_teams_score_no,
-                'first_half_home_win': betting_odds.first_half_home_win,
-                'first_half_draw': betting_odds.first_half_draw,
-                'first_half_away_win': betting_odds.first_half_away_win,
-                'second_half_home_win': betting_odds.second_half_home_win,
-                'second_half_draw': betting_odds.second_half_draw,
-                'second_half_away_win': betting_odds.second_half_away_win
+                'both_teams_score_no': betting_odds.both_teams_score_no
             }
             
             with open(str(self.csv_file_path), 'a', newline='', encoding='utf-8') as csvfile:
