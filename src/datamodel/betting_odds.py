@@ -29,6 +29,8 @@ class BettingOdds:
     home_or_away: Optional[float] = None    # 12
     
     # Total Goals (Over/Under)
+    over_1_5: Optional[float] = None
+    under_1_5: Optional[float] = None
     over_2_5: Optional[float] = None
     under_2_5: Optional[float] = None
     over_3_5: Optional[float] = None
@@ -62,72 +64,3 @@ class BettingOdds:
         for odds in odds_fields:
             if odds is not None and odds <= 0:
                 raise ValueError(f"Odds must be positive, got: {odds}")
-      
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert the betting odds to a dictionary for storage."""
-        return {
-            'timestamp': self.timestamp,
-            'source': self.source,
-            'match_id': self.match_id,
-            'home_team': self.home_team,
-            'away_team': self.away_team,
-            'odds': {
-                # 1X2 Market
-                '1x2': {
-                    'home_win': self.home_win,
-                    'draw': self.draw,
-                    'away_win': self.away_win
-                },
-                # Double Chance
-                'double_chance': {
-                    'home_or_draw': self.home_or_draw,
-                    'away_or_draw': self.away_or_draw,
-                    'home_or_away': self.home_or_away
-                },
-                # Total Goals
-                'total_goals': {
-                    'over_2_5': self.over_2_5,
-                    'under_2_5': self.under_2_5,
-                    'over_3_5': self.over_3_5,
-                    'under_3_5': self.under_3_5
-                },
-                # Both Teams to Score
-                'both_teams_score': {
-                    'yes': self.both_teams_score_yes,
-                    'no': self.both_teams_score_no
-                }
-            }
-        }
-    
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'BettingOdds':
-        """Create a BettingOdds instance from a dictionary."""
-        odds = data.get('odds', {})
-        
-        return cls(
-            timestamp=data['timestamp'],
-            source=data['source'],
-            match_id=data['match_id'],
-            home_team=data['home_team'],
-            away_team=data['away_team'],
-            
-            # 1X2
-            home_win=odds.get('1x2', {}).get('home_win'),
-            draw=odds.get('1x2', {}).get('draw'),
-            away_win=odds.get('1x2', {}).get('away_win'),
-            
-            # Double Chance
-            home_or_draw=odds.get('double_chance', {}).get('home_or_draw'),
-            away_or_draw=odds.get('double_chance', {}).get('away_or_draw'),
-            home_or_away=odds.get('double_chance', {}).get('home_or_away'),
-            
-            # Total Goals
-            over_2_5=odds.get('total_goals', {}).get('over_2_5'),
-            under_2_5=odds.get('total_goals', {}).get('under_2_5'),
-            over_3_5=odds.get('total_goals', {}).get('over_3_5'),
-            under_3_5=odds.get('total_goals', {}).get('under_3_5'),
-            
-            # Both Teams to Score
-            both_teams_score_yes=odds.get('both_teams_score', {}).get('yes'),
-            both_teams_score_no=odds.get('both_teams_score', {}).get('no')
-        )

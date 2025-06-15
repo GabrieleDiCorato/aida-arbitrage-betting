@@ -32,11 +32,12 @@ class CSVBettingOddsStorage(BettingOddsStorageBase):
         self.output_dir = Path(output_dir)
         self.filename_prefix = filename_prefix
         self.csv_file_path: Optional[Path] = None
+        
         self._fieldnames = [
             'timestamp', 'source', 'match_id', 'home_team', 'away_team',
             'home_win', 'draw', 'away_win',
             'home_or_draw', 'away_or_draw', 'home_or_away',
-            'over_2_5', 'under_2_5', 'over_3_5', 'under_3_5',
+            'over_1_5', 'under_1_5', 'over_2_5', 'under_2_5', 'over_3_5', 'under_3_5',
             'both_teams_score_yes', 'both_teams_score_no'
         ]
     
@@ -156,8 +157,9 @@ class CSVBettingOddsStorage(BettingOddsStorageBase):
             'draw': betting_odds.draw,
             'away_win': betting_odds.away_win,
             'home_or_draw': betting_odds.home_or_draw,
-            'away_or_draw': betting_odds.away_or_draw,
-            'home_or_away': betting_odds.home_or_away,
+            'away_or_draw': betting_odds.away_or_draw,            'home_or_away': betting_odds.home_or_away,
+            'over_1_5': betting_odds.over_1_5,
+            'under_1_5': betting_odds.under_1_5,
             'over_2_5': betting_odds.over_2_5,
             'under_2_5': betting_odds.under_2_5,
             'over_3_5': betting_odds.over_3_5,
