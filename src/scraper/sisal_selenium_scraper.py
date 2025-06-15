@@ -175,9 +175,6 @@ class SisalSeleniumScraper:
         if not self.driver:
             return odds_data
         
-        # Expand collapsed sections if needed
-        self._expand_betting_sections()
-        
         # Extract each market using data-qa patterns
         odds_data.update(self._extract_1x2_main())
         odds_data.update(self._extract_double_chance())
@@ -185,30 +182,6 @@ class SisalSeleniumScraper:
         odds_data.update(self._extract_both_teams_score())
         
         return odds_data
-
-    def _expand_betting_sections(self):
-        """Expand collapsed betting sections if they exist."""
-        try:
-            if not self.driver:
-                return
-                
-            # Look for Arrow-Down buttons to expand sections
-            expand_buttons = self.driver.find_elements(
-                By.CSS_SELECTOR, 
-                'button[icon="Arrow-Down"] i.icon-Arrow-Down'
-            )
-            
-            for button in expand_buttons:
-                try:
-                    # Click to expand if the section is collapsed
-                    parent_button = button.find_element(By.XPATH, "..")
-                    parent_button.click()
-                    print(f"✓ Expanded betting section")
-                except Exception as e:
-                    print(f"⚠ Could not expand section: {e}")
-                    
-        except Exception as e:
-            print(f"⚠ Error expanding sections: {e}")
 
     def _extract_1x2_main(self) -> Dict[str, Optional[float]]:
         """Extract main 1X2 market odds."""
@@ -260,8 +233,8 @@ class SisalSeleniumScraper:
         """Extract both teams to score (GOAL/NOGOAL) market odds."""
         # Based on HTML analysis: "Goal/NoGoal" section
         return self._extract_market_by_pattern({
-            'both_teams_score_yes': '_8333_1_1',  # Might be "TEAM 1" button
-            'both_teams_score_no': '_8333_1_2'    # Might be "NESSUNO" button
+            'both_teams_score_yes': '_18_0_1',  # "GOAL" button
+            'both_teams_score_no': '_18_0_2'    # "NOGOAL" button
         }, "Goal/NoGoal")
 
     def _extract_market_by_pattern(self, patterns: Dict[str, str], market_name: str) -> Dict[str, Optional[float]]:
