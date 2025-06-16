@@ -213,39 +213,41 @@ class LottomaticaSeleniumScraper:
         odds_data = {}
         
         try:
-            # Find quote wrappers with spread data in the passed container
+            # Find quote wrappers with data-spreadid in the passed container
+            # One quote wrapper per spread (2.5, 1.5, etc.)
             quote_wrappers = container.find_elements(By.CSS_SELECTOR, "div.quote-wrapper[data-spreadid]")
-            
+
             for quote_wrapper in quote_wrappers:
                 spread_id = quote_wrapper.get_attribute("data-spreadid")
-                
-                # Only process 2.5 and 1.5 spreads (most common)
-                if spread_id not in ['2.5', '1.5']:
-                    continue
-                
+
                 # Get all single quota wrappers in this spread
                 single_wrappers = quote_wrapper.find_elements(By.CSS_SELECTOR, ".single-quota-wrapper")
-                
-                # Process each wrapper to find Under/Over
-                for wrapper in single_wrappers:
-                    try:
-                        market_text = wrapper.find_element(By.CSS_SELECTOR, ".item--mercato span").text.strip()
-                        odds_value = self._extract_odds_from_wrapper(wrapper)
-                        
-                        if odds_value is not None:
-                            if market_text == "Under":
-                                if spread_id == '2.5':
-                                    odds_data['under_2_5'] = odds_value
-                                elif spread_id == '1.5':
-                                    odds_data['under_1_5'] = odds_value
-                            elif market_text == "Over":
-                                if spread_id == '2.5':
-                                    odds_data['over_2_5'] = odds_value
-                                elif spread_id == '1.5':
-                                    odds_data['over_1_5'] = odds_value
-                    except:
-                        continue
-                        
+
+                # Skip if spread_id is not one of the expected values
+                if spread_id == '1.5':
+                    under15 = self._extract_odds_from_wrapper(single_wrappers[0])
+                    if under15 is not None:
+                        odds_data['under_1_5'] = under15
+                    over15 = self._extract_odds_from_wrapper(single_wrappers[1])
+                    if over15 is not None:
+                        odds_data['over_1_5'] = over15
+                elif spread_id == '2.5':
+                    under25 = self._extract_odds_from_wrapper(single_wrappers[0])
+                    if under25 is not None:
+                        odds_data['under_2_5'] = under25
+                    over25 = self._extract_odds_from_wrapper(single_wrappers[1])
+                    if over25 is not None:
+                        odds_data['over_2_5'] = over25
+                elif spread_id == '3.5':
+                    under35 = self._extract_odds_from_wrapper(single_wrappers[0])
+                    if under35 is not None:
+                        odds_data['under_3_5'] = under35
+                    over35 = self._extract_odds_from_wrapper(single_wrappers[1])
+                    if over35 is not None:
+                        odds_data['over_3_5'] = over35
+                else:
+                    continue
+                  
         except Exception as e:
             print(f"Error extracting Over/Under odds: {e}")
             
@@ -275,52 +277,6 @@ class LottomaticaSeleniumScraper:
             
         except Exception as e:
             print(f"Error extracting Gol/NoGol odds: {e}")
-        
-        return odds_data
-
-    def _extract_market_by_text(self, market_texts: list, text_to_key_mapping: Dict[str, str], market_name: str) -> Dict[str, Optional[float]]:
-        """Extract odds for a market by matching market text within quote containers."""
-        odds_data = {}
-        
-        if not self.driver:
-            return odds_data
-        
-        try:
-            # Find all quote containers
-            containers = self.driver.find_elements(By.CSS_SELECTOR, "div.quote-wrapper")
-            
-            for container in containers:
-                # Get all quote wrappers in this container
-                wrappers = container.find_elements(By.CSS_SELECTOR, ".single-quota-wrapper")
-                found_markets = {}
-                
-                # Check each wrapper for market text matches
-                for wrapper in wrappers:
-                    try:
-                        market_text_element = wrapper.find_element(By.CSS_SELECTOR, ".item--mercato span")
-                        market_text = market_text_element.text.strip()
-                        
-                        if market_text in market_texts:
-                            # Try to extract odds value
-                            odds_value = self._extract_odds_from_wrapper(wrapper)
-                            found_markets[market_text] = odds_value
-                            
-                    except (NoSuchElementException, AttributeError):
-                        continue
-                
-                # If we found all expected markets in this container, use this data
-                if len(found_markets) == len(market_texts):
-                    for market_text, odds_value in found_markets.items():
-                        key = text_to_key_mapping.get(market_text)
-                        if key:
-                            odds_data[key] = odds_value
-                    
-                    if any(odds_data.values()):
-                        print(f"{market_name} odds extracted")
-                    break
-                    
-        except Exception as e:
-            print(f"Error extracting {market_name} odds: {e}")
         
         return odds_data
 
