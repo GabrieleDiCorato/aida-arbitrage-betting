@@ -185,10 +185,10 @@ class LottomaticaSeleniumScraper:
         
         try:
             # Find the quote wrapper for Double Chance market (typically column-3 with data-spreadid="0")
-            quote_wrapper = slot_container.find_element(By.CSS_SELECTOR, '.quote-wrapper.column-3[data-spreadid="0"]')
+            #quote_wrapper = slot_container.find_element(By.CSS_SELECTOR, '.quote-wrapper.column-3[data-spreadid="0"]')
             
             # Extract the three quotes in fixed order: 1X, X2, 12
-            wrappers = quote_wrapper.find_elements(By.CSS_SELECTOR, ".single-quota-wrapper")
+            wrappers = slot_container.find_elements(By.CSS_SELECTOR, ".single-quota-wrapper")
             
             if len(wrappers) >= 3:
                 # First wrapper: "1X" (home or draw)
