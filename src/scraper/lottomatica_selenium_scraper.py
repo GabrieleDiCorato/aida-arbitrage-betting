@@ -148,10 +148,7 @@ class LottomaticaSeleniumScraper:
         """Extract main 1X2 market odds using direct selector."""
         odds_data = {}
         
-        try:
-            # Find the quote wrapper for 1X2 market (typically column-3 with data-spreadid="0")
-            #quote_wrapper = slot_container.find_element(By.CSS_SELECTOR, '.quote-wrapper.column-3[data-spreadid="0"]')
-            
+        try:          
             # Extract the three quotes in order: 1, X, 2
             wrappers = slot_container.find_elements(By.CSS_SELECTOR, ".single-quota-wrapper")
             
@@ -184,9 +181,6 @@ class LottomaticaSeleniumScraper:
         odds_data = {}
         
         try:
-            # Find the quote wrapper for Double Chance market (typically column-3 with data-spreadid="0")
-            #quote_wrapper = slot_container.find_element(By.CSS_SELECTOR, '.quote-wrapper.column-3[data-spreadid="0"]')
-            
             # Extract the three quotes in fixed order: 1X, X2, 12
             wrappers = slot_container.find_elements(By.CSS_SELECTOR, ".single-quota-wrapper")
             
@@ -261,12 +255,9 @@ class LottomaticaSeleniumScraper:
         """Extract both teams to score (Gol/NoGol) market odds using precise selector based on HTML structure."""
         odds_data = {}
         
-        try:
-            # Find the quote wrapper for Gol/NoGol market (typically column-2 with data-spreadid="0")
-            quote_wrapper = slot_container.find_element(By.CSS_SELECTOR, '.quote-wrapper.column-2[data-spreadid="0"]')
-            
+        try:         
             # Extract the two quotes in fixed order: GG first, then NG
-            wrappers = quote_wrapper.find_elements(By.CSS_SELECTOR, ".single-quota-wrapper")
+            wrappers = slot_container.find_elements(By.CSS_SELECTOR, ".single-quota-wrapper")
             
             if len(wrappers) >= 2:
                 # First wrapper: "GG" (both teams score)
