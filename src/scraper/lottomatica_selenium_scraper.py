@@ -118,43 +118,44 @@ class LottomaticaSeleniumScraper:
         if not self.driver:
             return odds_data
         
-        # Extract each market using text-based matching
-        odds_data.update(self._extract_1x2_main())
-        odds_data.update(self._extract_double_chance())
-        odds_data.update(self._extract_over_under())
-        odds_data.update(self._extract_both_teams_score())
+        try:
+            # Find the expected containers by looking for slot-headers
+            slot_headers = self.driver.find_elements(By.CSS_SELECTOR, ".slot-header")
+
+            for header in slot_headers:
+                # Get the parent slot-container, then find the quote-wrapper
+                slot_container = header.find_element(By.XPATH, "..")
+                quote_wrapper = slot_container.find_element(By.CSS_SELECTOR, '.quote-wrapper.column-3[data-spreadid="0"]')
+            
+                if not quote_wrapper:
+                    continue
+                
+                header_text = header.text.strip().casefold()  # Remove leading/trailing spaces
+                if header_text == "1X2".casefold():
+                    odds_data.update(self._extract_1x2_main(quote_wrapper))
+                elif header_text == "Doppia Chance".casefold():
+                    odds_data.update(self._extract_double_chance(quote_wrapper))
+                elif header_text == "Gol/Nogol".casefold():
+                    odds_data.update(self._extract_both_teams_score(quote_wrapper))
+                elif header_text == "Under/Over".casefold():
+                    # _extract_over_under
+                    pass
+                else:
+                    # Skip any other headers
+                    continue
+                
+        except Exception as e:
+                    print(f"Error extracting odds: {e}")
         
         return odds_data
 
-    def _extract_1x2_main(self) -> Dict[str, Optional[float]]:
+    def _extract_1x2_main(self, container) -> Dict[str, Optional[float]]:
         """Extract main 1X2 market odds using direct selector."""
         odds_data = {}
         
-        if not self.driver:
-            return odds_data
-        
         try:
-            # Find the 1X2 container by looking for slot-header with "1X2" text (handle spaces)
-            slot_headers = self.driver.find_elements(By.CSS_SELECTOR, ".slot-header")
-            x2_container = None
-            
-            for header in slot_headers:
-                header_text = header.text.strip()  # Remove leading/trailing spaces
-                if "1X2" in header_text:
-                    # Get the parent slot-container, then find the quote-wrapper
-                    slot_container = header.find_element(By.XPATH, "..")
-                    quote_wrapper = slot_container.find_element(
-                        By.CSS_SELECTOR, 
-                        '.quote-wrapper.column-3[data-spreadid="0"]'
-                    )
-                    x2_container = quote_wrapper
-                    break
-            
-            if not x2_container:
-                return odds_data
-            
             # Extract the three quotes in order: 1, X, 2
-            wrappers = x2_container.find_elements(By.CSS_SELECTOR, ".single-quota-wrapper")
+            wrappers = container.find_elements(By.CSS_SELECTOR, ".single-quota-wrapper")
             
             if len(wrappers) >= 3:
                 # First wrapper: "1" (home win)
@@ -179,32 +180,13 @@ class LottomaticaSeleniumScraper:
         
         return odds_data
 
-    def _extract_double_chance(self) -> Dict[str, Optional[float]]:
+    def _extract_double_chance(self, container) -> Dict[str, Optional[float]]:
         """Extract double chance market odds using precise selector based on HTML structure."""
         odds_data = {}
         
-        if not self.driver:
-            return odds_data
-        
-        try:
-            # Find all slot containers and look for the one with "Doppia Chance" header
-            slot_containers = self.driver.find_elements(By.CSS_SELECTOR, ".slot-container")
-            double_chance_container = None
-            
-            for container in slot_containers:
-                try:
-                    header = container.find_element(By.CSS_SELECTOR, ".slot-header")
-                    if "Doppia Chance" in header.text:
-                        double_chance_container = container
-                        break
-                except:
-                    continue
-            
-            if not double_chance_container:
-                return odds_data
-            
+        try:         
             # Find the quote wrapper within this container
-            quote_wrapper = double_chance_container.find_element(By.CSS_SELECTOR, ".quote-wrapper")
+            quote_wrapper = container.find_element(By.CSS_SELECTOR, ".quote-wrapper")
             
             # Extract the three quotes in fixed order: 1X, X2, 12
             wrappers = quote_wrapper.find_elements(By.CSS_SELECTOR, ".single-quota-wrapper")
@@ -233,12 +215,12 @@ class LottomaticaSeleniumScraper:
         
         return odds_data
 
-    def _extract_over_under(self) -> Dict[str, Optional[float]]:
+    def _extract_over_under(self, container) -> Dict[str, Optional[float]]:
         """Extract over/under goals market odds using optimized selector."""
         odds_data = {}
-        
+
         if not self.driver:
-            return odds_data
+            return odds_data   
         
         # Try to extract 2.5 and 1.5 spreads (most common)
         for spread in ['2.5', '1.5']:
@@ -311,33 +293,16 @@ class LottomaticaSeleniumScraper:
             
         return odds_data
 
-    def _extract_both_teams_score(self) -> Dict[str, Optional[float]]:
+    def _extract_both_teams_score(self, container) -> Dict[str, Optional[float]]:
         """Extract both teams to score (Gol/NoGol) market odds using precise selector based on HTML structure."""
         odds_data = {}
-        
+
         if not self.driver:
             return odds_data
         
-        try:
-            # Find all slot containers and look for the one with "Gol/NoGol" header
-            slot_containers = self.driver.find_elements(By.CSS_SELECTOR, ".slot-container")
-            gol_nogol_container = None
-            
-            for container in slot_containers:
-                try:
-                    header = container.find_element(By.CSS_SELECTOR, ".slot-header")
-                    header_text = header.text.strip()  # Remove leading/trailing spaces
-                    if "Gol/NoGol" in header_text:
-                        gol_nogol_container = container
-                        break
-                except:
-                    continue
-            
-            if not gol_nogol_container:
-                return odds_data
-            
+        try:            
             # Find the quote wrapper within this container
-            quote_wrapper = gol_nogol_container.find_element(By.CSS_SELECTOR, ".quote-wrapper")
+            quote_wrapper = container.find_element(By.CSS_SELECTOR, ".quote-wrapper")
             
             # Extract the two quotes in fixed order: GG first, then NG
             wrappers = quote_wrapper.find_elements(By.CSS_SELECTOR, ".single-quota-wrapper")
