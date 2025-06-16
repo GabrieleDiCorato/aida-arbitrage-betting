@@ -145,13 +145,19 @@ class SisalSeleniumScraper:
 
     def _extract_over_under(self) -> Dict[str, Optional[float]]:
         """Extract over/under goals market odds."""
-        # Try different patterns for O/U 2.5 and 3.5
+        # Try different patterns for O/U 1.5, 2.5 and 3.5
         odds_data = {}
+
+         # O/U 1.5 patterns (based on HTML analysis)
+        ou_15_patterns = {
+            'under_1_5': ['_7989_150_1', '_150_1'],  
+            'over_1_5': ['_7989_150_2', '_150_2']
+        }
         
         # O/U 2.5 patterns (based on HTML analysis)
         ou_25_patterns = {
-            'under_2_5': ['_7989_250_1', '_450_1'],  
-            'over_2_5': ['_7989_250_2', '_450_2']
+            'under_2_5': ['_7989_250_1', '_250_1'],  
+            'over_2_5': ['_7989_250_2', '_250_2']
         }
         
         # O/U 3.5 patterns (estimated)
@@ -159,6 +165,10 @@ class SisalSeleniumScraper:
             'under_3_5': ['_7989_350_1', '_350_1'],
             'over_3_5': ['_7989_350_2', '_350_2']
         }
+
+        # Extract O/U 1.5
+        for bet_type, patterns in ou_15_patterns.items():
+            odds_data[bet_type] = self._try_extract_with_patterns(patterns)
         
         # Extract O/U 2.5
         for bet_type, patterns in ou_25_patterns.items():
