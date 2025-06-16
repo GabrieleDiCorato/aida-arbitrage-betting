@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-This project is part of a web scraping challenge for my AI & Data Analysis master's program. The objective is to explore web scraping techniques by extracting and analyzing live betting odds data to identify potential arbitrage opportunities.
+This project is part of a web scraping challenge for my AI & Data Analytics master's program. The objective is to explore web scraping techniques by extracting and analyzing live betting odds data to identify potential arbitrage opportunities.
 
 ## Project Description
 
