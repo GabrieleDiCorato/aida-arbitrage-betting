@@ -150,10 +150,10 @@ class LottomaticaSeleniumScraper:
         
         try:
             # Find the quote wrapper for 1X2 market (typically column-3 with data-spreadid="0")
-            quote_wrapper = slot_container.find_element(By.CSS_SELECTOR, '.quote-wrapper.column-3[data-spreadid="0"]')
+            #quote_wrapper = slot_container.find_element(By.CSS_SELECTOR, '.quote-wrapper.column-3[data-spreadid="0"]')
             
             # Extract the three quotes in order: 1, X, 2
-            wrappers = quote_wrapper.find_elements(By.CSS_SELECTOR, ".single-quota-wrapper")
+            wrappers = slot_container.find_elements(By.CSS_SELECTOR, ".single-quota-wrapper")
             
             if len(wrappers) >= 3:
                 # First wrapper: "1" (home win)
@@ -342,12 +342,11 @@ class LottomaticaSeleniumScraper:
                 odds_text = odds_element.text.strip()
                 if odds_text:
                     odds_value = float(odds_text.replace(',', '.'))
-                    if odds_value > 1.0:  # Sanity check
-                        return odds_value
+                    return odds_value
             except NoSuchElementException:
                 # Market is disabled (has lock icon instead of odds)
                 return None
-                
+            
         except Exception as e:
             print(f"Error extracting odds from wrapper: {e}")
             
