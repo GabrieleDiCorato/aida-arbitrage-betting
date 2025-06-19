@@ -2,7 +2,9 @@ from datetime import datetime
 from typing import Optional, Dict, Any
 from dataclasses import dataclass, field
 
-@dataclass
+# Close to an "immutable" data class (eq, hash, and repr methods are auto-generated)
+# frozen introduces a small overhead
+@dataclass(frozen=True) 
 class BettingOdds:
     """
     Data model for timestamped betting odds from a specific source.
