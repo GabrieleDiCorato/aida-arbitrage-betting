@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Optional, Dict, Any
 from dataclasses import dataclass, field
 
 # Close to an "immutable" data class (eq, hash, and repr methods are auto-generated)
@@ -21,26 +20,26 @@ class BettingOdds:
     away_team: str
     
     # Match Winner (1X2) - Most common market
-    home_win: Optional[float] = None  # 1
-    draw: Optional[float] = None      # X
-    away_win: Optional[float] = None  # 2
+    home_win: float | None = None  # 1
+    draw: float | None = None      # X
+    away_win: float | None = None  # 2
     
     # Double Chance
-    home_or_draw: Optional[float] = None    # 1X
-    away_or_draw: Optional[float] = None    # X2
-    home_or_away: Optional[float] = None    # 12
+    home_or_draw: float | None = None    # 1X
+    away_or_draw: float | None = None    # X2
+    home_or_away: float | None = None    # 12
     
     # Total Goals (Over/Under)
-    over_1_5: Optional[float] = None
-    under_1_5: Optional[float] = None
-    over_2_5: Optional[float] = None
-    under_2_5: Optional[float] = None
-    over_3_5: Optional[float] = None
-    under_3_5: Optional[float] = None
+    over_1_5: float | None = None
+    under_1_5: float | None = None
+    over_2_5: float | None = None
+    under_2_5: float | None = None
+    over_3_5: float | None = None
+    under_3_5: float | None = None
 
     # Both Teams to Score
-    both_teams_score_yes: Optional[float] = None
-    both_teams_score_no: Optional[float] = None
+    both_teams_score_yes: float | None = None
+    both_teams_score_no: float | None = None
     
     def __post_init__(self):
         """Validate the betting odds data after initialization."""
