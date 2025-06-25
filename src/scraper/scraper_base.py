@@ -26,17 +26,25 @@ class ScraperBase(abc.ABC):
     
     def __init__(
             self, 
-            headless: bool = True, 
-            storage: BettingOddsStorageBase | None = None
+            storage: BettingOddsStorageBase,
+            headless: bool = True
     ):
-        self.headless = headless
-        self.driver: webdriver.Chrome | None = None
-        self.wait: WebDriverWait | None = None
+        # Validate inputs
+        if not storage or not isinstance(storage, BettingOddsStorageBase):
+            raise ValueError("Storage must be an instance of BettingOddsStorageBase")
+        if not isinstance(headless, bool):
+            raise ValueError("Headless mode must be a boolean value")
+
+        # Initialize state
         self.storage = storage or CSVBettingOddsStorage()
+        self.headless = headless
+
         self._is_running = False
         self._session_start_time: datetime | None = None
+        self.driver: webdriver.Chrome | None = None
+        self.wait: WebDriverWait | None = None
         
-    def _setup_driver(self):
+    def _setup_driver(self) -> bool:
         """Setup Chrome WebDriver with minimal options for speed."""
         try:
             chrome_options = Options()
@@ -78,73 +86,6 @@ class ScraperBase(abc.ABC):
         except Exception as e:
             print(f"Failed to setup Chrome WebDriver: {e}")
             return False
-
-    @abc.abstractmethod
-    def _wait_for_page_load(self):
-        """Wait for the main betting content to load."""
-        try:
-            if not self.wait:
-                return
-            self.wait.until(
-                EC.presence_of_element_located((By.XPATH, "//*[contains(text(), '1X2 ESITO FINALE')]"))
-            )
-            print("Page content loaded")
-        except TimeoutException:
-            print("Page content may not be fully loaded")
-
-    @abc.abstractmethod
-    def _extract_team_names(self) -> tuple[str, str] | None:
-        """Extract team names using the dropdown button selector."""
-        pass  # To be implemented in subclasses
-
-    @abc.abstractmethod
-    def _extract_odds(self) -> dict[str, float] | None:
-        """Extract betting odds using optimized selectors."""
-        odds_data: dict[str, float] = {}
-        
-        if not self.driver:
-            return odds_data
-        
-        # Extract each market using data-qa patterns
-        main_1x2 = self._extract_1x2_main()
-        if main_1x2:
-            odds_data.update(main_1x2)
-        double_chance = self._extract_double_chance()
-        if double_chance:
-            odds_data.update(double_chance)
-        over_under = self._extract_over_under()
-        if over_under:
-            odds_data.update(over_under)
-        both_teams_score = self._extract_both_teams_score()
-        if both_teams_score:
-            odds_data.update(both_teams_score)
-        
-        return odds_data
-
-    @abc.abstractmethod
-    def _extract_1x2_main(self) -> dict[str, float] | None:
-        """Extract main 1X2 market odds."""
-        pass
-
-    @abc.abstractmethod
-    def _extract_double_chance(self) -> dict[str, float] | None:
-        """Extract double chance market odds."""
-        pass
-
-    @abc.abstractmethod
-    def _extract_over_under(self) -> dict[str, float] | None:
-        """Extract over/under goals market odds."""
-        pass
-
-    @abc.abstractmethod
-    def _extract_both_teams_score(self) -> dict[str, float] | None:
-        """Extract both teams to score (GOAL/NOGOAL) market odds."""
-        pass
-    
-    @classmethod
-    def _generate_match_id(cls, team1: str, team2: str) -> str:
-        """Generate match ID from team names."""
-        return f"{team1.lower().replace(' ', '-')}_{team2.lower().replace(' ', '-')}"
 
     @abc.abstractmethod
     def _handle_cookie_banner(self):
@@ -223,8 +164,8 @@ class ScraperBase(abc.ABC):
             # Initialize storage
             if not self.storage._is_initialized:
                 self.storage.initialize()
-            
-            # Setup browser (keep open for continuous scraping)
+
+            # Setup browser
             if not self._setup_driver():
                 return self._create_result_summary(successful_scrapes, failed_scrapes, scraped_data)
             
@@ -353,6 +294,65 @@ class ScraperBase(abc.ABC):
         except Exception as e:
             print(f"Error extracting betting data: {e}")
             return None
+        
+    @classmethod
+    def _generate_match_id(cls, team1: str, team2: str) -> str:
+        """Generate match ID from team names."""
+        return f"{team1.lower().replace(' ', '-')}_{team2.lower().replace(' ', '-')}"
+
+    @abc.abstractmethod
+    def _wait_for_page_load(self):
+        """Wait for the main betting content to load."""
+        pass
+
+    @abc.abstractmethod
+    def _extract_team_names(self) -> tuple[str, str] | None:
+        """Extract team names using the dropdown button selector."""
+        pass  # To be implemented in subclasses
+
+    @abc.abstractmethod
+    def _extract_odds(self) -> dict[str, float] | None:
+        """Extract betting odds using optimized selectors."""
+        odds_data: dict[str, float] = {}
+        
+        if not self.driver:
+            return odds_data
+        
+        # Extract each market using data-qa patterns
+        main_1x2 = self._extract_1x2_main()
+        if main_1x2:
+            odds_data.update(main_1x2)
+        double_chance = self._extract_double_chance()
+        if double_chance:
+            odds_data.update(double_chance)
+        over_under = self._extract_over_under()
+        if over_under:
+            odds_data.update(over_under)
+        both_teams_score = self._extract_both_teams_score()
+        if both_teams_score:
+            odds_data.update(both_teams_score)
+        
+        return odds_data
+
+    @abc.abstractmethod
+    def _extract_1x2_main(self) -> dict[str, float] | None:
+        """Extract main 1X2 market odds."""
+        pass
+
+    @abc.abstractmethod
+    def _extract_double_chance(self) -> dict[str, float] | None:
+        """Extract double chance market odds."""
+        pass
+
+    @abc.abstractmethod
+    def _extract_over_under(self) -> dict[str, float] | None:
+        """Extract over/under goals market odds."""
+        pass
+
+    @abc.abstractmethod
+    def _extract_both_teams_score(self) -> dict[str, float] | None:
+        """Extract both teams to score (GOAL/NOGOAL) market odds."""
+        pass
 
     def _create_result_summary(self, successful_scrapes: int, failed_scrapes: int, scraped_data: list) -> dict[str, Any]:
         """Create a summary of scraping results."""
@@ -380,3 +380,26 @@ class ScraperBase(abc.ABC):
         print(f"   Success rate: {result['success_rate']:.1f}%")
         print(f"   Data saved to: {result['storage_path'] or 'Storage backend'}")
         print("Session completed")
+
+    def _print_debug_info(self, betting_odds: BettingOdds):
+        """Print extracted betting odds for debugging."""
+        print(f"\n=== EXTRACTED BETTING ODDS ===")
+        print(f"Match: {betting_odds.home_team} vs {betting_odds.away_team}")
+        print(f"Match ID: {betting_odds.match_id}")
+        print(f"Source: {betting_odds.source}")
+        print(f"Timestamp: {betting_odds.timestamp}")
+        
+        if any([betting_odds.home_win, betting_odds.draw, betting_odds.away_win]):
+            print(f"1X2: {betting_odds.home_win} / {betting_odds.draw} / {betting_odds.away_win}")
+        
+        if any([betting_odds.home_or_draw, betting_odds.away_or_draw, betting_odds.home_or_away]):
+            print(f"Double Chance: {betting_odds.home_or_draw} / {betting_odds.away_or_draw} / {betting_odds.home_or_away}")
+        
+        if any([betting_odds.over_2_5, betting_odds.under_2_5]):
+            print(f"O/U 2.5: {betting_odds.over_2_5} / {betting_odds.under_2_5}")
+        
+        if any([betting_odds.both_teams_score_yes, betting_odds.both_teams_score_no]):
+            print(f"BTTS: {betting_odds.both_teams_score_yes} / {betting_odds.both_teams_score_no}")
+        
+        print(f"===============================\n")
+
