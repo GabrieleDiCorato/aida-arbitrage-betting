@@ -5,6 +5,7 @@ This package provides Selenium-based scrapers that use real browsers
 to extract live odds and convert them to standardized BettingOdds instances.
 """
 
-from .sisal_selenium_scraper import SisalSeleniumScraper
+from .sisal.scraper_sisal import SisalScraper
+from .lottomatica.scraper_lottomatica import LottomaticaScraper
 
-__all__ = ['SisalSeleniumScraper']
+__all__ = ['SisalScraper', 'LottomaticaScraper']

@@ -2,6 +2,9 @@
 Simplified Selenium-based Sisal website scraper for live betting odds.
 """
 
+import abc
+from typing import Any
+
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
@@ -11,26 +14,27 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 from webdriver_manager.chrome import ChromeDriverManager
 from datetime import datetime, timedelta
-from pathlib import Path
-from typing import Optional, Dict, Any
 from urllib.parse import urlparse
 import time
 import signal
-import sys
 from ..datamodel.betting_odds import BettingOdds
 from ..storage import CSVBettingOddsStorage, BettingOddsStorageBase
 
 
-class SisalSeleniumScraper:
-    """Simplified Sisal scraper focused on speed and reliability."""
+class ScraperBase(abc.ABC):
+    """Base class for Selenium-based betting odds scrapers."""
     
-    def __init__(self, headless: bool = True, storage: Optional[BettingOddsStorageBase] = None):
+    def __init__(
+            self, 
+            headless: bool = True, 
+            storage: BettingOddsStorageBase | None = None
+    ):
         self.headless = headless
-        self.driver: Optional[webdriver.Chrome] = None
-        self.wait: Optional[WebDriverWait] = None
+        self.driver: webdriver.Chrome | None = None
+        self.wait: WebDriverWait | None = None
         self.storage = storage or CSVBettingOddsStorage()
         self._is_running = False
-        self._session_start_time: Optional[datetime] = None
+        self._session_start_time: datetime | None = None
         
     def _setup_driver(self):
         """Setup Chrome WebDriver with minimal options for speed."""
@@ -75,6 +79,7 @@ class SisalSeleniumScraper:
             print(f"Failed to setup Chrome WebDriver: {e}")
             return False
 
+    @abc.abstractmethod
     def _wait_for_page_load(self):
         """Wait for the main betting content to load."""
         try:
@@ -87,157 +92,61 @@ class SisalSeleniumScraper:
         except TimeoutException:
             print("Page content may not be fully loaded")
 
-    def _extract_team_names(self) -> Optional[tuple]:
+    @abc.abstractmethod
+    def _extract_team_names(self) -> tuple[str, str] | None:
         """Extract team names using the dropdown button selector."""
-        try:
-            if not self.driver:
-                return None
-            element = self.driver.find_element(
-                By.CSS_SELECTOR, 
-                'button[data-qa="regulator-live-detail-dropdown-toggle"] div'
-            )
-            match_text = element.text.strip()
-            
-            if " - " in match_text:
-                teams = match_text.split(" - ", 1)
-                home_team = teams[0].strip()
-                away_team = teams[1].strip()
-                print(f"Teams: {home_team} vs {away_team}")
-                return (home_team, away_team)
-                
-        except NoSuchElementException:
-            print("Team names element not found")
-        except Exception as e:
-            print(f"Error extracting team names: {e}")
-        
-        return None
+        pass  # To be implemented in subclasses
 
-    def _extract_odds(self) -> Dict[str, Optional[float]]:
+    @abc.abstractmethod
+    def _extract_odds(self) -> dict[str, float] | None:
         """Extract betting odds using optimized selectors."""
-        odds_data = {}
+        odds_data: dict[str, float] = {}
         
         if not self.driver:
             return odds_data
         
         # Extract each market using data-qa patterns
-        odds_data.update(self._extract_1x2_main())
-        odds_data.update(self._extract_double_chance())
-        odds_data.update(self._extract_over_under())
-        odds_data.update(self._extract_both_teams_score())
+        main_1x2 = self._extract_1x2_main()
+        if main_1x2:
+            odds_data.update(main_1x2)
+        double_chance = self._extract_double_chance()
+        if double_chance:
+            odds_data.update(double_chance)
+        over_under = self._extract_over_under()
+        if over_under:
+            odds_data.update(over_under)
+        both_teams_score = self._extract_both_teams_score()
+        if both_teams_score:
+            odds_data.update(both_teams_score)
         
         return odds_data
 
-    def _extract_1x2_main(self) -> Dict[str, Optional[float]]:
+    @abc.abstractmethod
+    def _extract_1x2_main(self) -> dict[str, float] | None:
         """Extract main 1X2 market odds."""
-        return self._extract_market_by_pattern({
-            'home_win': '_3_0_1',
-            'draw': '_3_0_2', 
-            'away_win': '_3_0_3'
-        }, "1X2 Main")
+        pass
 
-    def _extract_double_chance(self) -> Dict[str, Optional[float]]:
+    @abc.abstractmethod
+    def _extract_double_chance(self) -> dict[str, float] | None:
         """Extract double chance market odds."""
-        return self._extract_market_by_pattern({
-            'home_or_draw': '_99999_0_1',
-            'away_or_draw': '_99999_0_2',
-            'home_or_away': '_99999_0_3'
-        }, "Double Chance")
+        pass
 
-    def _extract_over_under(self) -> Dict[str, Optional[float]]:
+    @abc.abstractmethod
+    def _extract_over_under(self) -> dict[str, float] | None:
         """Extract over/under goals market odds."""
-        # Try different patterns for O/U 1.5, 2.5 and 3.5
-        odds_data = {}
+        pass
 
-         # O/U 1.5 patterns (based on HTML analysis)
-        ou_15_patterns = {
-            'under_1_5': ['_7989_150_1', '_150_1'],  
-            'over_1_5': ['_7989_150_2', '_150_2']
-        }
-        
-        # O/U 2.5 patterns (based on HTML analysis)
-        ou_25_patterns = {
-            'under_2_5': ['_7989_250_1', '_250_1'],  
-            'over_2_5': ['_7989_250_2', '_250_2']
-        }
-        
-        # O/U 3.5 patterns (estimated)
-        ou_35_patterns = {
-            'under_3_5': ['_7989_350_1', '_350_1'],
-            'over_3_5': ['_7989_350_2', '_350_2']
-        }
-
-        # Extract O/U 1.5
-        for bet_type, patterns in ou_15_patterns.items():
-            odds_data[bet_type] = self._try_extract_with_patterns(patterns)
-        
-        # Extract O/U 2.5
-        for bet_type, patterns in ou_25_patterns.items():
-            odds_data[bet_type] = self._try_extract_with_patterns(patterns)
-            
-        # Extract O/U 3.5
-        for bet_type, patterns in ou_35_patterns.items():
-            odds_data[bet_type] = self._try_extract_with_patterns(patterns)
-            
-        if any(odds_data.values()):
-            print("Over/Under odds extracted")
-            
-        return odds_data
-
-    def _extract_both_teams_score(self) -> Dict[str, Optional[float]]:
+    @abc.abstractmethod
+    def _extract_both_teams_score(self) -> dict[str, float] | None:
         """Extract both teams to score (GOAL/NOGOAL) market odds."""
-        # Based on HTML analysis: "Goal/NoGoal" section
-        return self._extract_market_by_pattern({
-            'both_teams_score_yes': '_18_0_1',  # "GOAL" button
-            'both_teams_score_no': '_18_0_2'    # "NOGOAL" button
-        }, "Goal/NoGoal")
+        pass
+    
+    @classmethod
+    def _generate_match_id(cls, team1: str, team2: str) -> str:
+        """Generate match ID from team names."""
+        return f"{team1.lower().replace(' ', '-')}_{team2.lower().replace(' ', '-')}"
 
-    def _extract_market_by_pattern(self, patterns: Dict[str, str], market_name: str) -> Dict[str, Optional[float]]:
-        """Extract odds for a market using data-qa patterns."""
-        odds_data = {}
-        found_any = False
-        
-        for bet_type, pattern in patterns.items():
-            odds_data[bet_type] = self._try_extract_with_patterns([pattern])
-            if odds_data[bet_type] is not None:
-                found_any = True
-                
-        if found_any:
-            print(f"{market_name} odds extracted")
-            
-        return odds_data
-
-    def _try_extract_with_patterns(self, patterns: list) -> Optional[float]:
-        """Try to extract odds using multiple data-qa patterns."""
-        if not self.driver:
-            return None
-            
-        for pattern in patterns:
-            try:
-                # Look for button with data-qa containing the pattern
-                selector = f'button[data-qa*="{pattern}"] span'
-                elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
-                
-                for element in elements:
-                    try:
-                        odds_text = element.text.strip()
-                        if odds_text and odds_text.replace('.', '').replace(',', '').isdigit():
-                            odds_value = float(odds_text.replace(',', '.'))
-                            if odds_value > 1.0:  # Sanity check
-                                return odds_value
-                    except (ValueError, AttributeError):
-                        continue
-                        
-            except Exception:
-                continue
-                
-        return None
-
-    def _generate_match_id(self, url: str) -> str:
-        """Generate match ID from URL."""
-        path = urlparse(url).path
-        path_parts = [part for part in path.split('/') if part]
-        return path_parts[-1] if path_parts else f"match_{int(datetime.now().timestamp())}"
-
+    @abc.abstractmethod
     def _handle_cookie_banner(self):
         """Handle cookie banner."""
         try:
@@ -253,28 +162,6 @@ class SisalSeleniumScraper:
         except Exception as e:
             print(f"Cookie banner handling failed: {e}")
 
-    def _print_debug_info(self, betting_odds: BettingOdds):
-        """Print extracted betting odds for debugging."""
-        print(f"\n=== EXTRACTED BETTING ODDS ===")
-        print(f"Match: {betting_odds.home_team} vs {betting_odds.away_team}")
-        print(f"Match ID: {betting_odds.match_id}")
-        print(f"Source: {betting_odds.source}")
-        print(f"Timestamp: {betting_odds.timestamp}")
-        
-        if any([betting_odds.home_win, betting_odds.draw, betting_odds.away_win]):
-            print(f"1X2: {betting_odds.home_win} / {betting_odds.draw} / {betting_odds.away_win}")
-        
-        if any([betting_odds.home_or_draw, betting_odds.away_or_draw, betting_odds.home_or_away]):
-            print(f"Double Chance: {betting_odds.home_or_draw} / {betting_odds.away_or_draw} / {betting_odds.home_or_away}")
-        
-        if any([betting_odds.over_2_5, betting_odds.under_2_5]):
-            print(f"O/U 2.5: {betting_odds.over_2_5} / {betting_odds.under_2_5}")
-        
-        if any([betting_odds.both_teams_score_yes, betting_odds.both_teams_score_no]):
-            print(f"BTTS: {betting_odds.both_teams_score_yes} / {betting_odds.both_teams_score_no}")
-        
-        print(f"===============================\n")
-
     def close(self):
         """Close WebDriver and clean up storage."""
         if self.driver:
@@ -288,7 +175,7 @@ class SisalSeleniumScraper:
         if self.storage:
             self.storage.close()
 
-    def scrape(self, url: str, duration_minutes: Optional[float] = None, interval_seconds: int = 10) -> Dict[str, Any]:
+    def scrape(self, url: str, duration_minutes: float | None = None, interval_seconds: int = 10) -> dict[str, Any]:
         """
         Unified scraping method that handles both one-shot and continuous scraping.
         
@@ -362,7 +249,7 @@ class SisalSeleniumScraper:
                         if is_continuous:
                             print(f"{betting_odds.timestamp.strftime('%H:%M:%S')} - {betting_odds.home_team} vs {betting_odds.away_team} - 1X2: {betting_odds.home_win}/{betting_odds.draw}/{betting_odds.away_win}")
                         else:
-                            self._print_debug_info(betting_odds)
+                            print(betting_odds)
                     else:
                         failed_scrapes += 1
                         if not is_continuous:
@@ -413,6 +300,7 @@ class SisalSeleniumScraper:
         
         return result
     
+    @abc.abstractmethod
     def _navigate_and_setup_page(self, url: str) -> bool:
         """Navigate to the page and handle initial setup."""
         try:
@@ -436,7 +324,8 @@ class SisalSeleniumScraper:
             print(f"Error setting up page: {e}")
             return False
     
-    def _extract_betting_data(self, url: str) -> Optional[BettingOdds]:
+    @abc.abstractmethod
+    def _extract_betting_data(self, url: str) -> BettingOdds | None:
         """Extract betting odds data from the current page."""
         try:
             # Extract team names
@@ -446,8 +335,8 @@ class SisalSeleniumScraper:
                 return None
             
             # Extract odds data
-            odds_data = self._extract_odds()
-            match_id = self._generate_match_id(url)
+            match_id = ScraperBase._generate_match_id(*team_names)
+            odds_data: dict[str, float] | None = self._extract_odds()
             
             # Create BettingOdds instance
             betting_odds = BettingOdds(
@@ -456,7 +345,7 @@ class SisalSeleniumScraper:
                 match_id=match_id,
                 home_team=team_names[0],
                 away_team=team_names[1],
-                **odds_data
+                **(odds_data or {})
             )
             
             return betting_odds
@@ -464,8 +353,8 @@ class SisalSeleniumScraper:
         except Exception as e:
             print(f"Error extracting betting data: {e}")
             return None
-    
-    def _create_result_summary(self, successful_scrapes: int, failed_scrapes: int, scraped_data: list) -> Dict[str, Any]:
+
+    def _create_result_summary(self, successful_scrapes: int, failed_scrapes: int, scraped_data: list) -> dict[str, Any]:
         """Create a summary of scraping results."""
         total_scrapes = successful_scrapes + failed_scrapes
         success_rate = (successful_scrapes / total_scrapes * 100) if total_scrapes > 0 else 0
@@ -480,7 +369,7 @@ class SisalSeleniumScraper:
             'storage_path': getattr(self.storage, 'get_file_path', lambda: None)()
         }
     
-    def _print_session_summary(self, result: Dict[str, Any], is_continuous: bool) -> None:
+    def _print_session_summary(self, result: dict[str, Any], is_continuous: bool) -> None:
         """Print a summary of the scraping session."""
         print("-" * 60)
         mode_text = "CONTINUOUS" if is_continuous else "ONE-SHOT"

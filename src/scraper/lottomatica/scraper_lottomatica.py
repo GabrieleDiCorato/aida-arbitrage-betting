@@ -17,11 +17,11 @@ from urllib.parse import urlparse
 import time
 import signal
 import sys
-from ..datamodel.betting_odds import BettingOdds
-from ..storage import CSVBettingOddsStorage, BettingOddsStorageBase
+from ...datamodel.betting_odds import BettingOdds
+from ...storage import CSVBettingOddsStorage, BettingOddsStorageBase
 
 
-class LottomaticaSeleniumScraper:
+class LottomaticaScraper:
     """Simplified Lottomatica scraper focused on speed and reliability."""
     
     def __init__(self, headless: bool = True, storage: Optional[BettingOddsStorageBase] = None):
