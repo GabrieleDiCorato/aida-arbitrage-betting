@@ -15,8 +15,8 @@ from typing import Optional, Dict, Any
 from urllib.parse import urlparse
 import time
 import signal
-from ..datamodel.betting_odds import BettingOdds
-from ..storage import CSVBettingOddsStorage, BettingOddsStorageBase
+from ...datamodel.betting_odds import BettingOdds
+from ...storage import CSVBettingOddsStorage, BettingOddsStorageBase
 
 
 class SisalScraper:
