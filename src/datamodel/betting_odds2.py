@@ -1,6 +1,5 @@
 from datetime import datetime
-from attr import frozen
-from pydantic import BaseModel, field_validator, ConfigDict, PositiveFloat, Strict, StrictStr
+from pydantic import BaseModel, ConfigDict, Strict, StrictStr
 from typing import Annotated
 import annotated_types as at
 from .data_sources import DataSource
@@ -24,7 +23,7 @@ QuoteValue = Annotated[float, at.Gt(1.0), Strict()]
 QuotesByName = Annotated[dict[StrictStr, QuoteValue], at.MinLen(1)]
 MatchQuotesByType = Annotated[dict[StrictStr, QuotesByName], at.MinLen(1)]
 
-class Match(BaseModelWithConfig):
+class MatchOdds(BaseModelWithConfig):
     """ Data model for a specific match with betting odds."""
     
     # Match ID
@@ -45,4 +44,4 @@ class Match(BaseModelWithConfig):
 class BettingOdds2(BaseModelWithConfig):
     """ Data model for timestamped betting odds from a specific source."""
     
-    matches: Annotated[list[Match], at.MinLen(1)]
+    matches: Annotated[list[MatchOdds], at.MinLen(1)]

@@ -5,6 +5,7 @@ Simplified Selenium-based Sisal website scraper for live betting odds.
 import abc
 from typing import Any
 
+from pydantic_core import Url
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
@@ -16,6 +17,8 @@ from webdriver_manager.chrome import ChromeDriverManager
 from datetime import datetime, timedelta
 from urllib.parse import urlparse
 import time
+
+from src.datamodel.betting_odds2 import BettingOdds2
 from ..storage import CSVBettingOddsStorage, BettingOddsStorageBase
 
 class ScraperBase(abc.ABC):
@@ -110,7 +113,7 @@ class ScraperBase(abc.ABC):
         except Exception as e:
             print(f"Cookie banner handling failed: {e}")
     
-    def _navigate_and_setup_page(self, driver: webdriver.Chrome, wait: WebDriverWait, url: str) -> bool:
+    def _navigate_and_setup_page(self, driver: webdriver.Chrome, wait: WebDriverWait, url: Url) -> bool:
         """Navigate to the page and handle initial setup."""
         try:
             if not driver or not wait:
@@ -118,8 +121,18 @@ class ScraperBase(abc.ABC):
                 return False
 
             # Navigate to page
-            print(f"Navigating to: {url}")
-            driver.get(url)
+            if not url or not isinstance(url, Url):
+                print("Invalid URL provided")
+                return False
+            elif url.scheme not in ["https"]:
+                print(f"Invalid URL scheme: {url.scheme}. Expected 'https'.")
+                return False
+            elif not url.path:
+                print("URL path is empty")
+                return False
+            
+            print(f"Navigating to: {url.path}")
+            driver.get(url.path)
 
             # Handle cookie banner
             self._handle_cookie_banner(driver, wait)
@@ -163,12 +176,18 @@ class ScraperBase(abc.ABC):
 
         self._is_running = False
 
+    @abc.abstractmethod
+    def _extract_betting_data(self, url: Url) -> BettingOdds2:   
+        """Extract betting data from the page.
+        This method should be implemented in subclasses to handle specific page structures."""
+        pass
+
     def scrape(
         self,
-        url: str,
+        url: Url,
         duration_minutes: float | None = None,
         interval_seconds: int = 10,
-    ) -> dict[str, Any]:
+    ) -> BettingOdds2:
         """
         Unified scraping method that handles both one-shot and continuous scraping.
 
@@ -230,19 +249,10 @@ class ScraperBase(abc.ABC):
                     betting_odds = self._extract_betting_data(url)
 
                     if betting_odds:
-                        successful_scrapes += 1
-                        scraped_data.append(betting_odds)
-
                         # Store data
                         self.storage.store(betting_odds)
-
-                        # Log based on mode
-                        if is_continuous:
-                            print(
-                                f"{betting_odds.timestamp.strftime('%H:%M:%S')} - {betting_odds.home_team} vs {betting_odds.away_team} - 1X2: {betting_odds.home_win}/{betting_odds.draw}/{betting_odds.away_win}"
-                            )
-                        else:
-                            print(betting_odds)
+                        print(betting_odds.model_dump())
+                       
                     else:
                         failed_scrapes += 1
                         if not is_continuous:
