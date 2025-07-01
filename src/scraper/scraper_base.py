@@ -11,16 +11,15 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException, NoSuchElementException
+from selenium.common.exceptions import TimeoutException
 from webdriver_manager.chrome import ChromeDriverManager
 from datetime import datetime, timedelta
 from urllib.parse import urlparse
 import time
 from ..storage import CSVBettingOddsStorage, BettingOddsStorageBase
 
-
 class ScraperBase(abc.ABC):
-    """Base class for Selenium-based betting odds scrapers."""
+    """Base class for Selenium-based betting odds scrapers. Scraper instances are stateful and not thread-safe."""
 
     def __init__(self, storage: BettingOddsStorageBase, headless: bool = True):
         # Validate inputs
@@ -30,8 +29,10 @@ class ScraperBase(abc.ABC):
             raise ValueError("Headless mode must be a boolean value")
 
         # Initialize state
-        self.storage = storage or CSVBettingOddsStorage()
-        self.headless = headless
+        self.driver: webdriver.Chrome | None = None
+        self.storage: BettingOddsStorageBase = storage or CSVBettingOddsStorage()
+        self.headless: bool = headless
+        self._is_running: bool = False
 
     def _setup_options(self) -> Options:
         chrome_options: Options = Options()
@@ -92,12 +93,12 @@ class ScraperBase(abc.ABC):
         return "1200,1080"
 
     @abc.abstractmethod
-    def _handle_cookie_banner(self):
+    def _handle_cookie_banner(self, driver: webdriver.Chrome, wait: WebDriverWait):
         """Handle cookie banner."""
         try:
-            if not self.driver:
+            if not driver:
                 return
-            cookie_button = WebDriverWait(self.driver, 3).until(
+            cookie_button = WebDriverWait(driver, 3).until(
                 EC.element_to_be_clickable(
                     (By.CSS_SELECTOR, "#onetrust-accept-btn-handler")
                 )
@@ -108,6 +109,44 @@ class ScraperBase(abc.ABC):
             print("No cookie banner found")
         except Exception as e:
             print(f"Cookie banner handling failed: {e}")
+    
+    def _navigate_and_setup_page(self, driver: webdriver.Chrome, wait: WebDriverWait, url: str) -> bool:
+        """Navigate to the page and handle initial setup."""
+        try:
+            if not driver or not wait:
+                print("Driver or wait not initialized")
+                return False
+
+            # Navigate to page
+            print(f"Navigating to: {url}")
+            driver.get(url)
+
+            # Handle cookie banner
+            self._handle_cookie_banner(driver, wait)
+
+            # Wait for page to load
+            self._wait_for_page_load(driver, wait)
+
+            return True
+
+        except Exception as e:
+            print(f"Error setting up page: {e}")
+            return False
+
+    @abc.abstractmethod
+    def _wait_for_page_load(self, driver: webdriver.Chrome, wait: WebDriverWait):
+        """Wait for the main betting content to load."""
+        try:
+            if not wait:
+                return
+            wait.until(
+                EC.presence_of_element_located(
+                    (By.XPATH, "//*[contains(text(), '1X2 ESITO FINALE')]")
+                )
+            )
+            print("Page content loaded")
+        except TimeoutException:
+            print("Page content may not be fully loaded")
 
     def close(self):
         """Close WebDriver and clean up storage."""
@@ -122,44 +161,7 @@ class ScraperBase(abc.ABC):
         if self.storage:
             self.storage.close()
 
-    @abc.abstractmethod
-    def _navigate_and_setup_page(self, url: str) -> bool:
-        """Navigate to the page and handle initial setup."""
-        try:
-            if not self.driver or not self.wait:
-                print("Driver or wait not initialized")
-                return False
-
-            # Navigate to page
-            print(f"Navigating to: {url}")
-            self.driver.get(url)
-
-            # Handle cookie banner
-            self._handle_cookie_banner()
-
-            # Wait for page to load
-            self._wait_for_page_load()
-
-            return True
-
-        except Exception as e:
-            print(f"Error setting up page: {e}")
-            return False
-
-    @abc.abstractmethod
-    def _wait_for_page_load(self):
-        """Wait for the main betting content to load."""
-        try:
-            if not self.wait:
-                return
-            self.wait.until(
-                EC.presence_of_element_located(
-                    (By.XPATH, "//*[contains(text(), '1X2 ESITO FINALE')]")
-                )
-            )
-            print("Page content loaded")
-        except TimeoutException:
-            print("Page content may not be fully loaded")
+        self._is_running = False
 
     def scrape(
         self,
