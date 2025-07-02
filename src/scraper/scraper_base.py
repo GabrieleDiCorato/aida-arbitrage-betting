@@ -18,8 +18,9 @@ from datetime import datetime, timedelta
 from urllib.parse import urlparse
 import time
 
-from src.datamodel.betting_odds2 import BettingOdds2
+from src.datamodel.betting_odds import BettingOdds2
 from ..storage import CSVBettingOddsStorage, BettingOddsStorageBase
+
 
 class ScraperBase(abc.ABC):
     """Base class for Selenium-based betting odds scrapers. Scraper instances are stateful and not thread-safe."""
@@ -46,9 +47,7 @@ class ScraperBase(abc.ABC):
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-        chrome_options.add_experimental_option(
-            "excludeSwitches", ["enable-automation"]
-        )
+        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
         chrome_options.add_experimental_option("useAutomationExtension", False)
 
         # Speed optimizations
@@ -112,39 +111,33 @@ class ScraperBase(abc.ABC):
             print("No cookie banner found")
         except Exception as e:
             print(f"Cookie banner handling failed: {e}")
-    
-    def _navigate_and_setup_page(self, driver: webdriver.Chrome, wait: WebDriverWait, url: Url) -> bool:
+
+    def _navigate_and_setup_page(
+        self, driver: webdriver.Chrome, wait: WebDriverWait, url: Url
+    ):
         """Navigate to the page and handle initial setup."""
-        try:
-            if not driver or not wait:
-                print("Driver or wait not initialized")
-                return False
 
-            # Navigate to page
-            if not url or not isinstance(url, Url):
-                print("Invalid URL provided")
-                return False
-            elif url.scheme not in ["https"]:
-                print(f"Invalid URL scheme: {url.scheme}. Expected 'https'.")
-                return False
-            elif not url.path:
-                print("URL path is empty")
-                return False
-            
-            print(f"Navigating to: {url.path}")
-            driver.get(url.path)
+        if not driver or not wait:
+            raise RuntimeError("Driver or wait not initialized")
 
-            # Handle cookie banner
-            self._handle_cookie_banner(driver, wait)
+        # Validate
+        if not url or not isinstance(url, Url):
+            raise RuntimeError("Invalid URL provided")
+        elif url.scheme not in ["https"]:
+            raise RuntimeError(f"Invalid URL scheme: {url.scheme}. Expected 'https'.")
+        elif not url.path:
+            raise RuntimeError("URL path is empty")
 
-            # Wait for page to load
-            self._wait_for_page_load(driver, wait)
+        print(f"Navigating to: {url.path}")
+        driver.get(url.path)
 
-            return True
+        # Handle cookie banner
+        self._handle_cookie_banner(driver, wait)
 
-        except Exception as e:
-            print(f"Error setting up page: {e}")
-            return False
+        # Wait for page to load
+        self._wait_for_page_load(driver, wait)
+
+        print("Page navigation and setup complete")
 
     @abc.abstractmethod
     def _wait_for_page_load(self, driver: webdriver.Chrome, wait: WebDriverWait):
@@ -177,70 +170,63 @@ class ScraperBase(abc.ABC):
         self._is_running = False
 
     @abc.abstractmethod
-    def _extract_betting_data(self, url: Url) -> BettingOdds2:   
+    def _extract_betting_data(self, url: Url) -> BettingOdds2:
         """Extract betting data from the page.
-        This method should be implemented in subclasses to handle specific page structures."""
+        This method should be implemented in subclasses to handle specific page structures.
+        """
         pass
 
     def scrape(
         self,
         url: Url,
-        duration_minutes: float | None = None,
-        interval_seconds: int = 10,
+        duration_minutes: float = 0,
+        interval_seconds: int = 0,
     ) -> BettingOdds2:
         """
         Unified scraping method that handles both one-shot and continuous scraping.
 
         Args:
             url: The URL of the Sisal betting page to scrape
-            duration_minutes: How long to run scraping (None for one-shot, >0 for continuous)
-            interval_seconds: How often to scrape data in continuous mode (default: 10 seconds)
+            duration_minutes: How long to run scraping (0 for one-shot, > 0 for continuous. Default: 0)
+            interval_seconds: How often to scrape data in continuous mode (default: 0 seconds for one-shot)
 
         Returns:
             Dictionary with scraping results including successful_scrapes count and data
         """
-        # Determine scraping mode
-        is_continuous = duration_minutes is not None and duration_minutes > 0
+        if self._is_running:
+            raise RuntimeError("Scraper is already running")
+
+        # Determine scraping mode and validate parameters
+        is_continuous = abs(duration_minutes) > 1e-6
+        if is_continuous and (duration_minutes < 0 or interval_seconds <= 0):
+            raise ValueError("Invalid continuous scraping config. Duration must be >= 0 and interval must be > 0 seconds")
 
         print(
-            f"Starting scraping session. Mode:",
-            f"continuous ({duration_minutes} minutes)" if is_continuous else "one-shot",
+            f"Starting scraping.",
+            f"Mode: [" + 
+                ("continuous (duration={duration_minutes}min, freq={interval_seconds}sec)" if is_continuous else "one-shot")
+            + "]",
+            "URL: [{url}]",
         )
-        print(f"    URL: {url}")
+        print(f"Storage: {self.storage.__class__.__name__}")
 
-        if is_continuous:
-            print(f"   Duration: {duration_minutes} minutes")
-            print(f"   Interval: {interval_seconds} seconds")
-        print(f"   Storage: {self.storage.__class__.__name__}")
-
-        # Initialize session state
         self._is_running = True
-        self._session_start_time = datetime.now()
-        session_end_time = None
-        if is_continuous and duration_minutes:
-            session_end_time = self._session_start_time + timedelta(
-                minutes=duration_minutes
-            )
-        successful_scrapes = 0
-        failed_scrapes = 0
-        scraped_data = []
 
         try:
             # Initialize storage
             if not self.storage._is_initialized:
                 self.storage.initialize()
 
-            # Setup browser
-            if not self._setup_driver():
-                return self._create_result_summary(
-                    successful_scrapes, failed_scrapes, scraped_data
-                )
+            # Initialize webdriver and wait
+            options: Options = self._setup_options()
+            self.driver = self._setup_driver(options)
+            wait: WebDriverWait = self._setup_wait(self.driver)
 
-            # Navigate to page initially
-            if not self._navigate_and_setup_page(url):
-                return self._create_result_summary(
-                    successful_scrapes, failed_scrapes, scraped_data
-                )
+            # Navigate to page
+            self._navigate_and_setup_page(self.driver, wait, url)
+
+            # Initialize session state
+            session_start_time, session_end_time = self.get_start_end_times(duration_minutes)
 
             # Scraping loop (runs once for one-shot, multiple times for continuous)
             while self._is_running:
@@ -250,11 +236,9 @@ class ScraperBase(abc.ABC):
 
                     if betting_odds:
                         # Store data
-                        self.storage.store(betting_odds)
                         print(betting_odds.model_dump())
-                       
+                        self.storage.store(betting_odds)
                     else:
-                        failed_scrapes += 1
                         if not is_continuous:
                             print("Failed to extract betting odds")
 
@@ -276,7 +260,6 @@ class ScraperBase(abc.ABC):
 
                 except Exception as e:
                     print(f"Error during scraping: {e}")
-                    failed_scrapes += 1
                     if not is_continuous:
                         break
                     time.sleep(1)  # Brief pause before retrying
@@ -304,3 +287,11 @@ class ScraperBase(abc.ABC):
         self._print_session_summary(result, is_continuous)
 
         return result
+
+    @staticmethod
+    def get_start_end_times(duration_minutes) -> tuple[datetime, datetime]:
+        session_start_time: datetime = datetime.now()
+        session_end_time: datetime = session_start_time + timedelta(
+            minutes=duration_minutes
+        )
+        return (session_start_time, session_end_time)

@@ -1,67 +1,47 @@
 from datetime import datetime
-from dataclasses import dataclass, field
+from pydantic import BaseModel, ConfigDict, Strict, StrictStr
+from typing import Annotated
+import annotated_types as at
+from .data_sources import DataSource
+from .etl_version import EtlVersion
+from .sport import Sport
 
-# Close to an "immutable" data class (eq, hash, and repr methods are auto-generated)
-# frozen introduces a small overhead
-@dataclass(frozen=True) 
-class BettingOdds:
-    """
-    Data model for timestamped betting odds from a specific source.
+class BaseModelWithConfig(BaseModel):
+    model_config = ConfigDict(
+        strict=True,  # Enforce type checking, do not allow implicit type coercion
+        extra='forbid',  # Disallow extra fields
+        validate_default=True,  # Validate default values
+        validate_assignment=False,  # Don't validate on assignment, this class is immutable
+        frozen=True,    # Make the model immutable
+        use_enum_values=True,  # Use enum values directly
+        allow_inf_nan=False,  # Disallow NaN and Infinity values
+        cache_strings=True,  # Cache strings for performance
+    )
+
+# Type aliases for improved readability
+QuoteValue = Annotated[float, at.Gt(1.0), Strict()]
+QuotesByName = Annotated[dict[StrictStr, QuoteValue], at.MinLen(1)]
+MatchQuotesByType = Annotated[dict[StrictStr, QuotesByName], at.MinLen(1)]
+
+class MatchOdds(BaseModelWithConfig):
+    """ Data model for a specific match with betting odds."""
     
-    This class represents the core data structure for betting odds,
-    focusing on data modeling and serialization only.
-    """
+    # Match ID
+    match_id: StrictStr
     
-    # Core metadata
+    # Metadata (repeated across all matches for downstream processing)
+    source: DataSource
     timestamp: datetime
-    source: str
-    match_id: str
-    home_team: str
-    away_team: str
+    etl_version: EtlVersion = EtlVersion.ONE
+    sport: Sport  
+    league: str | None = None
     
-    # Match Winner (1X2) - Most common market
-    home_win: float | None = None  # 1
-    draw: float | None = None      # X
-    away_win: float | None = None  # 2
-    
-    # Double Chance
-    home_or_draw: float | None = None    # 1X
-    away_or_draw: float | None = None    # X2
-    home_or_away: float | None = None    # 12
-    
-    # Total Goals (Over/Under)
-    over_1_5: float | None = None
-    under_1_5: float | None = None
-    over_2_5: float | None = None
-    under_2_5: float | None = None
-    over_3_5: float | None = None
-    under_3_5: float | None = None
+    # Odds for the match
+    # dict[str, dict[str, float]] where the first key is the quote type (e.g., "1x2" or "over/under"), 
+    # the second key is the outcome (e.g., "1", "goal", "X2"), and the value is the quote (must be > 1.0).
+    quotes: MatchQuotesByType
 
-    # Both Teams to Score
-    both_teams_score_yes: float | None = None
-    both_teams_score_no: float | None = None
+class BettingOdds(BaseModelWithConfig):
+    """ Data model for timestamped betting odds from a specific source."""
     
-    def __post_init__(self):
-        """Validate the betting odds data after initialization."""
-        self._validate()
-    
-    def _validate(self) -> None:
-        """Private method to validate betting odds data."""
-        if not self.source:
-            raise ValueError("Source cannot be empty")
-        if not self.match_id:
-            raise ValueError("Match ID cannot be empty")
-        if not self.home_team or not self.away_team:
-            raise ValueError("Team names cannot be empty")
-            
-        # Validate odds are positive if provided
-        odds_fields = [
-            self.home_win, self.draw, self.away_win, self.home_or_draw,
-            self.away_or_draw, self.home_or_away, self.over_2_5, self.under_2_5,
-            self.over_3_5, self.under_3_5,
-            self.both_teams_score_yes, self.both_teams_score_no
-        ]
-        
-        for odds in odds_fields:
-            if odds is not None and odds <= 0:
-                raise ValueError(f"Odds must be positive, got: {odds}")
+    matches: Annotated[list[MatchOdds], at.MinLen(1)]
